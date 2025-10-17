@@ -12,7 +12,7 @@ import java.util.Optional;
 @ApplicationScoped
 public class ChapterDAO {
 
-    @PersistenceContext(unitName = "default")
+    @PersistenceContext(unitName = "PostgresDS")
     private EntityManager entityManager;
 
     public Chapter save(Chapter chapter) {

@@ -1,0 +1,22 @@
+version: '3.9'
+
+services:
+  pg:
+    image: postgres:15
+    container_name: pg
+    restart: always
+    environment:
+      POSTGRES_DB: studs
+      POSTGRES_USER: studs
+      POSTGRES_PASSWORD: studs
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U studs"]
+      interval: 5s
+      retries: 5
+
+volumes:
+  pgdata:

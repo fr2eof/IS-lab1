@@ -12,7 +12,7 @@ import java.util.List;
 @ApplicationScoped
 public class SpecialOperationsDAO {
 
-    @PersistenceContext(unitName = "default")
+    @PersistenceContext(unitName = "PostgresDS")
     private EntityManager entityManager;
 
     public BigDecimal getAverageHeartCount() {

@@ -8,7 +8,7 @@ import jakarta.persistence.PersistenceContext;
 @ApplicationScoped
 public class EntityManagerProducer {
 
-    @PersistenceContext(unitName = "default")
+    @PersistenceContext(unitName = "PostgresDS")
     @Produces
     private EntityManager entityManager;
 }

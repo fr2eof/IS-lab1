@@ -17,7 +17,7 @@ import java.util.Optional;
 @ApplicationScoped
 public class SpaceMarineDAO {
 
-    @PersistenceContext(unitName = "default")
+    @PersistenceContext(unitName = "PostgresDS")
     private EntityManager entityManager;
 
     public SpaceMarine save(SpaceMarine spaceMarine) {
