@@ -12,6 +12,7 @@ public class JaxRsApplication extends Application {
         return Set.of(
             SpaceMarineResource.class,
             ChapterResource.class,
+            CoordinatesResource.class,
             SpecialOperationsResource.class
         );
     }

@@ -6,10 +6,13 @@ import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import se.ifmo.ru.lab1.dto.ChapterDTO;
+import se.ifmo.ru.lab1.dto.PageResponse;
+import se.ifmo.ru.lab1.dto.RelatedObjectsResponse;
 import se.ifmo.ru.lab1.entity.Chapter;
 import se.ifmo.ru.lab1.exception.EntityNotFoundException;
 import se.ifmo.ru.lab1.mapper.SpaceMarineMapper;
 import se.ifmo.ru.lab1.service.ChapterService;
+import se.ifmo.ru.lab1.ws.SpaceMarineWebSocket;
 
 import java.util.List;
 import java.util.Optional;
@@ -26,12 +29,24 @@ public class ChapterResource {
     private SpaceMarineMapper spaceMarineMapper;
 
     @GET
-    public Response getAllChapters() {
-        List<Chapter> chapters = chapterService.getAllChapters();
+    public Response getAllChapters(
+            @QueryParam("page") @DefaultValue("0") int page,
+            @QueryParam("size") @DefaultValue("10") int size,
+            @QueryParam("sortBy") String sortBy,
+            @QueryParam("sortOrder") @DefaultValue("asc") String sortOrder) {
+        List<Chapter> chapters;
+        long totalCount;
+        
+        chapters = chapterService.getChapters(page, size, sortBy, sortOrder);
+        totalCount = chapterService.getChaptersCount();
+        
         List<ChapterDTO> chapterDTOs = chapters.stream()
                 .map(spaceMarineMapper::toChapterDTO)
                 .collect(java.util.stream.Collectors.toList());
-        return Response.ok(chapterDTOs).build();
+        
+        return Response.ok()
+                .entity(new PageResponse<>(chapterDTOs, totalCount, page, size))
+                .build();
     }
 
     @GET
@@ -39,24 +54,39 @@ public class ChapterResource {
     public Response getChapterById(@PathParam("id") Long id) {
         Optional<Chapter> chapter = chapterService.getChapterById(id);
         if (chapter.isPresent()) {
-            return Response.ok(chapter.get()).build();
+            ChapterDTO dto = spaceMarineMapper.toChapterDTO(chapter.get());
+            return Response.ok(dto).build();
         } else {
             throw new EntityNotFoundException("Chapter", id);
         }
     }
 
     @POST
-    public Response createChapter(@Valid Chapter chapter) {
+    public Response createChapter(@Valid ChapterDTO chapterDTO) {
+        Chapter chapter = spaceMarineMapper.toChapterEntity(chapterDTO);
         Chapter createdChapter = chapterService.createChapter(chapter);
-        return Response.status(Response.Status.CREATED).entity(createdChapter).build();
+        ChapterDTO createdDTO = spaceMarineMapper.toChapterDTO(createdChapter);
+        
+        // Уведомляем всех клиентов о создании главы
+        SpaceMarineWebSocket.broadcast("chapter_created:" + createdDTO.getId());
+        
+        return Response.status(Response.Status.CREATED).entity(createdDTO).build();
     }
 
     @PUT
     @Path("/{id}")
-    public Response updateChapter(@PathParam("id") Long id, @Valid Chapter chapter) {
+    public Response updateChapter(@PathParam("id") Long id, @Valid ChapterDTO chapterDTO) {
+        Chapter chapter = spaceMarineMapper.toChapterEntity(chapterDTO);
         Chapter updatedChapter = chapterService.updateChapter(id, chapter);
         if (updatedChapter != null) {
-            return Response.ok(updatedChapter).build();
+            ChapterDTO updatedDTO = spaceMarineMapper.toChapterDTO(updatedChapter);
+            
+            // Уведомляем всех клиентов об обновлении главы
+            SpaceMarineWebSocket.broadcast("chapter_updated:" + id);
+            // Также уведомляем об обновлении SpaceMarine, которые используют эту главу
+            SpaceMarineWebSocket.broadcast("updated");
+            
+            return Response.ok(updatedDTO).build();
         } else {
             throw new EntityNotFoundException("Chapter", id);
         }
@@ -65,11 +95,21 @@ public class ChapterResource {
     @DELETE
     @Path("/{id}")
     public Response deleteChapter(@PathParam("id") Long id) {
-        boolean deleted = chapterService.deleteChapter(id);
-        if (deleted) {
-            return Response.noContent().build();
-        } else {
-            throw new EntityNotFoundException("Chapter", id);
+        try {
+            boolean deleted = chapterService.deleteChapter(id);
+            if (deleted) {
+                // Уведомляем всех клиентов об удалении главы
+                SpaceMarineWebSocket.broadcast("chapter_deleted:" + id);
+                // Также уведомляем об обновлении SpaceMarine, которые использовали эту главу
+                SpaceMarineWebSocket.broadcast("updated");
+                return Response.noContent().build();
+            } else {
+                throw new EntityNotFoundException("Chapter", id);
+            }
+        } catch (Exception e) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new ErrorResponse(e.getMessage()))
+                    .build();
         }
     }
 
@@ -81,6 +121,17 @@ public class ChapterResource {
             return Response.ok(new SuccessResponse("Marine removed from chapter")).build();
         } else {
             throw new IllegalArgumentException("Cannot remove marine from chapter");
+        }
+    }
+
+    @GET
+    @Path("/{id}/related")
+    public Response getRelatedObjects(@PathParam("id") Long id) {
+        try {
+            RelatedObjectsResponse related = chapterService.getRelatedObjects(id);
+            return Response.ok(related).build();
+        } catch (Exception e) {
+            throw new EntityNotFoundException("Chapter", id);
         }
     }
 
