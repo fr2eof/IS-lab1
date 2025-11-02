@@ -1,6 +1,9 @@
 package se.ifmo.ru.lab1.service;
 
 import se.ifmo.ru.lab1.entity.SpaceMarine;
+import se.ifmo.ru.lab1.dto.SpaceMarineDTO;
+import se.ifmo.ru.lab1.dto.RelatedObjectsResponse;
+import se.ifmo.ru.lab1.dto.DeleteResponse;
 
 import java.util.List;
 import java.util.Optional;
@@ -9,11 +12,15 @@ public interface SpaceMarineService {
     
     SpaceMarine createSpaceMarine(SpaceMarine spaceMarine);
     
+    SpaceMarine createSpaceMarineFromDTO(SpaceMarineDTO dto);
+    
     Optional<SpaceMarine> getSpaceMarineById(Integer id);
     
     List<SpaceMarine> getAllSpaceMarines();
     
     List<SpaceMarine> getSpaceMarines(int page, int size);
+    
+    List<SpaceMarine> getSpaceMarines(int page, int size, String sortBy, String sortOrder);
     
     List<SpaceMarine> getSpaceMarinesWithFilters(String nameFilter, String sortBy, String sortOrder, int page, int size);
     
@@ -23,7 +30,13 @@ public interface SpaceMarineService {
     
     SpaceMarine updateSpaceMarine(Integer id, SpaceMarine updatedSpaceMarine);
     
+    SpaceMarine updateSpaceMarineFromDTO(Integer id, SpaceMarineDTO dto);
+    
     boolean deleteSpaceMarine(Integer id);
+    
+    boolean deleteSpaceMarine(Integer id, boolean deleteCoordinates, boolean deleteChapter);
+    
+    DeleteResponse deleteSpaceMarineWithDetails(Integer id, boolean deleteCoordinates, boolean deleteChapter);
     
     List<SpaceMarine> findSpaceMarinesByNameContaining(String name);
     
@@ -32,4 +45,8 @@ public interface SpaceMarineService {
     long countSpaceMarinesByHealthLessThan(Integer health);
     
     Double getAverageHeartCount();
+    
+    RelatedObjectsResponse getRelatedObjects(Integer id);
+    
+    SpaceMarine removeMarineFromChapter(Integer id);
 }
