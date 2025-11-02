@@ -10,7 +10,8 @@ import jakarta.validation.constraints.NotNull;
 @Table(name = "chapters")
 public class Chapter {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "chapter_seq")
+    @SequenceGenerator(name = "chapter_seq", sequenceName = "chapter_id_seq", allocationSize = 1)
     private Long id;
 
     @NotBlank(message = "Chapter name cannot be null or empty")

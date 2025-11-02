@@ -7,19 +7,20 @@ import jakarta.validation.constraints.NotNull;
 @Table(name = "coordinates")
 public class Coordinates {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "coordinates_seq")
+    @SequenceGenerator(name = "coordinates_seq", sequenceName = "coordinates_id_seq", allocationSize = 1)
     private Long id;
 
     @NotNull(message = "X coordinate cannot be null")
     @Column(name = "x", nullable = false)
     private Float x;
 
-    @Column(name = "y", nullable = false)
-    private double y;
+    @Column(name = "y")
+    private Double y;
 
     public Coordinates() {}
 
-    public Coordinates(Float x, double y) {
+    public Coordinates(Float x, Double y) {
         this.x = x;
         this.y = y;
     }
@@ -40,11 +41,11 @@ public class Coordinates {
         this.x = x;
     }
 
-    public double getY() {
+    public Double getY() {
         return y;
     }
 
-    public void setY(double y) {
+    public void setY(Double y) {
         this.y = y;
     }
 

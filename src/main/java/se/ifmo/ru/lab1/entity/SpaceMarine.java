@@ -8,7 +8,8 @@ import java.time.ZonedDateTime;
 @Table(name = "space_marines")
 public class SpaceMarine {
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "space_marine_seq")
+    @SequenceGenerator(name = "space_marine_seq", sequenceName = "space_marine_id_seq", allocationSize = 1)
     @Column(name = "id")
     private Integer id;
 
@@ -17,15 +18,17 @@ public class SpaceMarine {
     private String name;
 
     @NotNull(message = "Coordinates cannot be null")
-    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "coordinates_id", nullable = false)
+    // NOTE: Multiple SpaceMarines can share the same coordinates according to requirements
+    // If constraint violation occurs, unique constraint may need to be removed from DB
     private Coordinates coordinates;
 
     @NotNull(message = "Creation date cannot be null")
     @Column(name = "creation_date", nullable = false)
     private ZonedDateTime creationDate;
 
-    @OneToOne(cascade = CascadeType.ALL, fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "chapter_id")
     private Chapter chapter;
 
