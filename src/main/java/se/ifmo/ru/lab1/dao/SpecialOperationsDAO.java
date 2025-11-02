@@ -4,7 +4,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import jakarta.persistence.Query;
-import se.ifmo.ru.lab1.entity.Chapter;
 
 import java.math.BigDecimal;
 import java.util.List;

@@ -45,6 +45,32 @@ public class SpaceMarineDAO {
         return query.getResultList();
     }
 
+    public List<SpaceMarine> findAll(int page, int size, String sortBy, String sortOrder) {
+        CriteriaBuilder cb = entityManager.getCriteriaBuilder();
+        CriteriaQuery<SpaceMarine> cq = cb.createQuery(SpaceMarine.class);
+        Root<SpaceMarine> root = cq.from(SpaceMarine.class);
+        
+        cq.select(root);
+        
+        if (sortBy != null && !sortBy.trim().isEmpty()) {
+            try {
+                if ("desc".equalsIgnoreCase(sortOrder)) {
+                    cq.orderBy(cb.desc(root.get(sortBy)));
+                } else {
+                    cq.orderBy(cb.asc(root.get(sortBy)));
+                }
+            } catch (Exception e) {
+                // Если поле не найдено, игнорируем сортировку
+            }
+        }
+        
+        TypedQuery<SpaceMarine> query = entityManager.createQuery(cq);
+        query.setFirstResult(page * size);
+        query.setMaxResults(size);
+        
+        return query.getResultList();
+    }
+
     public List<SpaceMarine> findByNameContaining(String name) {
         TypedQuery<SpaceMarine> query = entityManager.createQuery(
                 "SELECT sm FROM SpaceMarine sm LEFT JOIN FETCH sm.coordinates LEFT JOIN FETCH sm.chapter " +
@@ -86,7 +112,7 @@ public class SpaceMarineDAO {
         List<Predicate> predicates = new ArrayList<>();
         
         if (nameFilter != null && !nameFilter.trim().isEmpty()) {
-            predicates.add(cb.like(cb.lower(root.get("name")), "%" + nameFilter.toLowerCase() + "%"));
+            predicates.add(cb.equal(cb.lower(root.get("name")), nameFilter.toLowerCase().trim()));
         }
         
         cq.where(predicates.toArray(new Predicate[0]));
@@ -114,7 +140,7 @@ public class SpaceMarineDAO {
         List<Predicate> predicates = new ArrayList<>();
         
         if (nameFilter != null && !nameFilter.trim().isEmpty()) {
-            predicates.add(cb.like(cb.lower(root.get("name")), "%" + nameFilter.toLowerCase() + "%"));
+            predicates.add(cb.equal(cb.lower(root.get("name")), nameFilter.toLowerCase().trim()));
         }
         
         cq.select(cb.count(root));
@@ -139,5 +165,61 @@ public class SpaceMarineDAO {
                 "SELECT COUNT(sm) FROM SpaceMarine sm", 
                 Long.class);
         return query.getSingleResult();
+    }
+
+    public List<SpaceMarine> findByCoordinatesId(Long coordinatesId) {
+        TypedQuery<SpaceMarine> query = entityManager.createQuery(
+                "SELECT sm FROM SpaceMarine sm WHERE sm.coordinates.id = :coordinatesId", 
+                SpaceMarine.class);
+        query.setParameter("coordinatesId", coordinatesId);
+        return query.getResultList();
+    }
+
+    public List<SpaceMarine> findByChapterId(Long chapterId) {
+        TypedQuery<SpaceMarine> query = entityManager.createQuery(
+                "SELECT sm FROM SpaceMarine sm WHERE sm.chapter.id = :chapterId", 
+                SpaceMarine.class);
+        query.setParameter("chapterId", chapterId);
+        return query.getResultList();
+    }
+
+    public long countByCoordinatesId(Long coordinatesId) {
+        TypedQuery<Long> query = entityManager.createQuery(
+                "SELECT COUNT(sm) FROM SpaceMarine sm WHERE sm.coordinates.id = :coordinatesId", 
+                Long.class);
+        query.setParameter("coordinatesId", coordinatesId);
+        return query.getSingleResult();
+    }
+
+    public long countByChapterId(Long chapterId) {
+        TypedQuery<Long> query = entityManager.createQuery(
+                "SELECT COUNT(sm) FROM SpaceMarine sm WHERE sm.chapter.id = :chapterId", 
+                Long.class);
+        query.setParameter("chapterId", chapterId);
+        return query.getSingleResult();
+    }
+
+    public void deleteByChapterId(Long chapterId) {
+        TypedQuery<SpaceMarine> query = entityManager.createQuery(
+                "SELECT sm FROM SpaceMarine sm WHERE sm.chapter.id = :chapterId", 
+                SpaceMarine.class);
+        query.setParameter("chapterId", chapterId);
+        List<SpaceMarine> marines = query.getResultList();
+        
+        for (SpaceMarine marine : marines) {
+            entityManager.remove(marine);
+        }
+    }
+
+    public void deleteByCoordinatesId(Long coordinatesId) {
+        TypedQuery<SpaceMarine> query = entityManager.createQuery(
+                "SELECT sm FROM SpaceMarine sm WHERE sm.coordinates.id = :coordinatesId", 
+                SpaceMarine.class);
+        query.setParameter("coordinatesId", coordinatesId);
+        List<SpaceMarine> marines = query.getResultList();
+        
+        for (SpaceMarine marine : marines) {
+            entityManager.remove(marine);
+        }
     }
 }
