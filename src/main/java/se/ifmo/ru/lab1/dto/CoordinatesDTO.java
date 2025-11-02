@@ -9,11 +9,11 @@ public class CoordinatesDTO {
     @NotNull(message = "X coordinate cannot be null")
     private Float x;
     
-    private double y;
+    private Double y;
 
     public CoordinatesDTO() {}
 
-    public CoordinatesDTO(Long id, Float x, double y) {
+    public CoordinatesDTO(Long id, Float x, Double y) {
         this.id = id;
         this.x = x;
         this.y = y;
@@ -35,11 +35,11 @@ public class CoordinatesDTO {
         this.x = x;
     }
 
-    public double getY() {
+    public Double getY() {
         return y;
     }
 
-    public void setY(double y) {
+    public void setY(Double y) {
         this.y = y;
     }
 }

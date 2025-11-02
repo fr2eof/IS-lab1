@@ -10,7 +10,6 @@ public class SpaceMarineDTO {
     @NotBlank(message = "Name cannot be null or empty")
     private String name;
     
-    @NotNull(message = "Coordinates cannot be null")
     private CoordinatesDTO coordinates;
     
     private ZonedDateTime creationDate;
@@ -29,6 +28,12 @@ public class SpaceMarineDTO {
     private String category;
     
     private String weaponType;
+    
+    // Поля для ID связей (используются при создании)
+    @NotNull(message = "Coordinates ID cannot be null")
+    private Long coordinatesId;
+    
+    private Long chapterId;
 
     public SpaceMarineDTO() {}
 
@@ -117,5 +122,21 @@ public class SpaceMarineDTO {
 
     public void setWeaponType(String weaponType) {
         this.weaponType = weaponType;
+    }
+    
+    public Long getCoordinatesId() {
+        return coordinatesId;
+    }
+    
+    public void setCoordinatesId(Long coordinatesId) {
+        this.coordinatesId = coordinatesId;
+    }
+    
+    public Long getChapterId() {
+        return chapterId;
+    }
+    
+    public void setChapterId(Long chapterId) {
+        this.chapterId = chapterId;
     }
 }
