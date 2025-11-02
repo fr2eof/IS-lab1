@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Coordinates</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="dialog.js"></script>
+    <script defer src="reusable.js"></script>
+    <script defer src="coordinates.js"></script>
+</head>
+<body>
+<div class="container">
+    <h1>Coordinates</h1>
+    <div class="button-bar">
+        <div class="button-subgroup">
+            <button onclick="window.location.href='index.html'">Space Marines</button>
+            <button onclick="window.location.href='chapters.html'">Chapters</button>
+            <button onclick="window.location.href='coordinates.html'">Coordinates</button>
+            <button onclick="window.location.href='special-operations.html'">Специальные операции</button>
+        </div>
+    </div>
+    <div class="button-bar">
+        <div class="button-subgroup">
+            <button id="createCoordBtn">Создать</button>
+            <button id="updateCoordBtn">Обновить</button>
+            <button id="deleteCoordBtn">Удалить</button>
+        </div>
+    </div>
+    <div class="button-bar">
+        <div class="pagination-group">
+            <label>Элементов на странице:
+                <select id="pageSizeSelect">
+                    <option value="5">5</option>
+                    <option value="10" selected>10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                </select>
+            </label>
+        </div>
+    </div>
+
+    <table id="coordinatesTable">
+        <thead>
+        <tr>
+            <th class="sortable" data-field="id">ID <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-field="x">X <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-field="y">Y <span class="sort-icon">↕</span></th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    
+    <div id="pagination" class="pagination"></div>
+</div>
+
+<div id="coordModal" class="modal">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>Создать / Обновить Координаты</h2>
+        <form id="coordForm">
+            <label>X: <input type="number" step="0.01" name="x" required></label>
+            <label>Y: <input type="number" step="0.01" name="y"></label>
+            <button type="submit">Сохранить</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>
