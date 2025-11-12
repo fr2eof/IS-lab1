@@ -1,6 +1,7 @@
 @startuml
 title Архитектура приложения Space Marines
 
+
 skinparam packageStyle rectangle
 skinparam linetype ortho
 
