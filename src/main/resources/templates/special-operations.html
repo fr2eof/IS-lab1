@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Специальные операции</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/dialog.js"></script>
+    <script defer src="/reusable.js"></script>
+    <script defer src="/special-operations.js"></script>
+</head>
+<body>
+<div class="container">
+    <h1>Специальные операции</h1>
+    <div class="button-bar">
+        <div class="button-subgroup">
+            <button onclick="window.location.href='index.html'">Space Marines</button>
+            <button onclick="window.location.href='chapters.html'">Chapters</button>
+            <button onclick="window.location.href='coordinates.html'">Coordinates</button>
+            <button onclick="window.location.href='special-operations.html'">Специальные операции</button>
+            <button onclick="window.location.href='import.html'">Импорт</button>
+            <button onclick="window.location.href='import-history.html'">История импорта</button>
+        </div>
+    </div>
+
+    <!-- Операция 1: Среднее значение heartCount -->
+    <div class="result-section">
+        <h3>Среднее значение heartCount</h3>
+        <p>Вычислить среднее значение поля heartCount для всех десантников</p>
+        <button id="avgHeartCountBtn" class="btn-primary">Вычислить</button>
+        <div id="avgHeartCountResult" class="result-content" style="display: none;">
+            <div class="result-value" id="avgHeartCountValue"></div>
+        </div>
+    </div>
+
+    <!-- Операция 2: Количество десантников с health меньше заданного -->
+    <div class="result-section">
+        <h3>Количество десантников с health меньше заданного</h3>
+        <p>Найти количество десантников, у которых значение health меньше заданного</p>
+        <div style="margin: 15px 0;">
+            <label>Значение health:
+                <input type="number" id="healthValue" min="1" placeholder="Введите значение" style="width: 200px; padding: 5px; margin-left: 10px;">
+            </label>
+            <button id="healthLessBtn" class="btn-primary" style="margin-left: 10px;">Найти</button>
+        </div>
+        <div id="healthLessResult" class="result-content" style="display: none;">
+            <div class="result-value" id="healthLessValue"></div>
+        </div>
+    </div>
+
+    <!-- Операция 3: Поиск по имени -->
+    <div class="result-section">
+        <h3>Поиск десантников по имени</h3>
+        <p>Найти всех десантников, у которых имя содержит указанную подстроку</p>
+        <div style="margin: 15px 0;">
+            <label>Подстрока для поиска:
+                <input type="text" id="nameSearchValue" placeholder="Введите подстроку" style="width: 200px; padding: 5px; margin-left: 10px;">
+            </label>
+            <button id="findByNameBtn" class="btn-primary" style="margin-left: 10px;">Найти</button>
+        </div>
+        <div id="findByNameResult" class="result-content" style="display: none;">
+            <div id="findByNameList"></div>
+        </div>
+    </div>
+
+    <!-- Операция 4: Отчисление из ордена -->
+    <div class="result-section">
+        <h3>Отчислить десантника из ордена</h3>
+        <p>Отчислить десантника из ордена (требуется вписать ID десантника в поле ниже)</p>
+        <div style="margin: 15px 0;">
+            <label>ID десантника:
+                <input type="number" id="marineIdForRemoval" min="1" placeholder="Введите ID десантника" style="width: 200px; padding: 5px; margin-left: 10px;">
+            </label>
+            <button id="removeFromChapterBtn" class="btn-primary" style="margin-left: 10px;">Отчислить</button>
+        </div>
+        <div id="removeFromChapterResult" class="result-content" style="display: none;">
+            <div id="removeFromChapterMessage"></div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
+

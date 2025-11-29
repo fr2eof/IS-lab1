@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Space Marines</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/dialog.js"></script>
+    <script defer src="/reusable.js"></script>
+    <script defer src="/main.js"></script>
+</head>
+<body>
+<div class="container">
+    <h1>Space Marines</h1>
+    <div class="button-bar">
+        <div class="button-subgroup">
+            <button onclick="window.location.href='index.html'">Space Marines</button>
+            <button onclick="window.location.href='chapters.html'">Chapters</button>
+            <button onclick="window.location.href='coordinates.html'">Coordinates</button>
+            <button onclick="window.location.href='special-operations.html'">Специальные операции</button>
+            <button onclick="window.location.href='import.html'">Импорт</button>
+            <button onclick="window.location.href='import-history.html'">История импорта</button>
+        </div>
+    </div>
+    <div class="button-bar">
+        <div class="button-subgroup">
+            <button id="createMarineBtn">Создать</button>
+            <button id="updateMarineBtn">Обновить</button>
+            <button id="deleteMarineBtn">Удалить</button>
+        </div>
+    </div>
+
+    <!-- Фильтрация и сортировка -->
+    <div class="filter-section">
+        <div class="filter-group">
+            <label>Фильтр по имени (точное совпадение):
+                <input type="text" id="nameFilter" placeholder="Введите имя">
+            </label>
+            <button onclick="applyFilter()">Применить фильтр</button>
+            <button onclick="clearFilter()">Сбросить фильтр</button>
+        </div>
+        <div class="sort-group">
+            <span style="color: #666; font-size: 14px;">Нажмите на заголовки таблицы для сортировки</span>
+        </div>
+        <div class="pagination-group">
+            <label>Элементов на странице:
+                <select id="pageSizeSelect">
+                    <option value="5">5</option>
+                    <option value="10" selected>10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                </select>
+            </label>
+        </div>
+    </div>
+
+    <table id="marineTable">
+        <thead>
+        <tr>
+            <th class="sortable" data-field="id">ID <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-field="name">Имя <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-field="health">Health <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-field="heartCount">Heart Count <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-field="category">Категория <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-field="weaponType">Оружие <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-field="coordinates">Координаты <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-field="chapter">Орден <span class="sort-icon">↕</span></th>
+        </tr>
+        </thead>
+        <tbody>        </tbody>
+    </table>
+    
+    <!-- Пагинация -->
+    <div id="pagination" class="pagination"></div>
+</div>
+
+<div id="marineModal" class="modal">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>Создать / Обновить десантника</h2>
+        <form id="marineForm">
+            <label>Имя: <input type="text" name="name" required></label>
+            <label>Health: <input type="number" name="health" min="1" required></label>
+            <label>Heart Count: <input type="number" name="heartCount" min="1" max="3" required></label>
+            <label>Категория:
+                <select name="category" required>
+                    <option value="">--Выберите--</option>
+                    <option value="ASSAULT">ASSAULT</option>
+                    <option value="SUPPRESSOR">SUPPRESSOR</option>
+                    <option value="TERMINATOR">TERMINATOR</option>
+                    <option value="CHAPLAIN">CHAPLAIN</option>
+                </select>
+            </label>
+            <label>Оружие:
+                <select name="weaponType" required>
+                    <option value="">--Выберите--</option>
+                    <option value="BOLT_PISTOL">BOLT_PISTOL</option>
+                    <option value="COMBI_FLAMER">COMBI_FLAMER</option>
+                    <option value="COMBI_PLASMA_GUN">COMBI_PLASMA_GUN</option>
+                    <option value="FLAMER">FLAMER</option>
+                    <option value="MULTI_MELTA">MULTI_MELTA</option>
+                </select>
+            </label>
+            <label>Координаты:
+                <select name="coordinatesId" required></select>
+            </label>
+            <label>Орден:
+                <select name="chapterId"></select>
+            </label>
+            <button type="submit">Сохранить</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>

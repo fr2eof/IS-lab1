@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Chapters</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/dialog.js"></script>
+    <script defer src="/reusable.js"></script>
+    <script defer src="/chapters.js"></script>
+</head>
+<body>
+<div class="container">
+    <h1>Chapters</h1>
+    <div class="button-bar">
+        <div class="button-subgroup">
+            <button onclick="window.location.href='index.html'">Space Marines</button>
+            <button onclick="window.location.href='chapters.html'">Chapters</button>
+            <button onclick="window.location.href='coordinates.html'">Coordinates</button>
+            <button onclick="window.location.href='special-operations.html'">Специальные операции</button>
+            <button onclick="window.location.href='import.html'">Импорт</button>
+            <button onclick="window.location.href='import-history.html'">История импорта</button>
+        </div>
+    </div>
+    <div class="button-bar">
+        <div class="button-subgroup">
+            <button id="createChapterBtn">Создать</button>
+            <button id="updateChapterBtn">Обновить</button>
+            <button id="deleteChapterBtn">Удалить</button>
+        </div>
+    </div>
+    <div class="button-bar">
+        <div class="pagination-group">
+            <label>Элементов на странице:
+                <select id="pageSizeSelect">
+                    <option value="5">5</option>
+                    <option value="10" selected>10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                </select>
+            </label>
+        </div>
+    </div>
+
+    <table id="chaptersTable">
+        <thead>
+        <tr>
+            <th class="sortable" data-field="id">ID <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-field="name">Название <span class="sort-icon">↕</span></th>
+            <th class="sortable" data-field="marinesCount">Количество десантников <span class="sort-icon">↕</span></th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    
+    <div id="pagination" class="pagination"></div>
+</div>
+
+<div id="chapterModal" class="modal">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2>Создать / Обновить Орден</h2>
+        <form id="chapterForm">
+            <label>Название: <input type="text" name="name" required></label>
+            <label>Количество десантников: <input type="number" name="marinesCount" min="1" max="1000" required></label>
+            <button type="submit">Сохранить</button>
+        </form>
+    </div>
+</div>
+</body>
+</html>

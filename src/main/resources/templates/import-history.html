@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>История импорта</title>
+    <link rel="stylesheet" href="/style.css">
+    <script src="/dialog.js"></script>
+    <script defer src="/reusable.js"></script>
+    <script defer src="/import-history.js"></script>
+</head>
+<body>
+<div class="container">
+    <h1>История импорта</h1>
+    <div class="button-bar">
+        <div class="button-subgroup">
+            <button onclick="window.location.href='index.html'">Space Marines</button>
+            <button onclick="window.location.href='chapters.html'">Chapters</button>
+            <button onclick="window.location.href='coordinates.html'">Coordinates</button>
+            <button onclick="window.location.href='special-operations.html'">Специальные операции</button>
+            <button onclick="window.location.href='import.html'">Импорт</button>
+            <button onclick="window.location.href='import-history.html'">История импорта</button>
+        </div>
+    </div>
+
+    <div class="filter-section">
+        <div class="form-group">
+            <label for="usernameFilter">Имя пользователя:</label>
+            <input type="text" id="usernameFilter" value="user" placeholder="Введите имя пользователя">
+        </div>
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="isAdminCheck"> Администратор
+            </label>
+        </div>
+        <div class="form-group">
+            <button onclick="loadHistory()">Загрузить историю</button>
+        </div>
+        <div class="pagination-group">
+            <label>Элементов на странице:
+                <select id="pageSizeSelect" onchange="loadHistory()">
+                    <option value="5">5</option>
+                    <option value="10" selected>10</option>
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                </select>
+            </label>
+        </div>
+    </div>
+
+    <table id="historyTable">
+        <thead>
+        <tr>
+            <th>ID операции</th>
+            <th>Пользователь</th>
+            <th>Статус</th>
+            <th>Количество объектов</th>
+            <th>Дата создания</th>
+            <th>Сообщение об ошибке</th>
+        </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+    
+    <div id="pagination" class="pagination"></div>
+</div>
+</body>
+</html>
+
