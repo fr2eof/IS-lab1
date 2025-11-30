@@ -65,8 +65,13 @@ public class CoordinatesController {
         Coordinates createdCoordinates = coordinatesService.createCoordinates(coordinates);
         CoordinatesDTO createdDTO = spaceMarineMapper.toCoordinatesDTO(createdCoordinates);
         
-        // Уведомляем всех клиентов о создании координат
-        SpaceMarineWebSocket.broadcast("coordinates_created:" + createdDTO.id());
+        // Уведомляем всех клиентов о создании координат (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
+        try {
+            SpaceMarineWebSocket.broadcast("coordinates_created:" + createdDTO.id());
+        } catch (Exception wsException) {
+            // Логируем ошибку WebSocket, но не прерываем обработку HTTP запроса
+            System.err.println("WebSocket broadcast error: " + wsException.getMessage());
+        }
         
         return ResponseEntity.status(HttpStatus.CREATED).body(createdDTO);
     }
@@ -75,19 +80,29 @@ public class CoordinatesController {
     public ResponseEntity<CoordinatesDTO> updateCoordinates(
             @PathVariable Long id, 
             @Valid @RequestBody CoordinatesDTO coordinatesDTO) {
-        Coordinates coordinates = spaceMarineMapper.toCoordinatesEntity(coordinatesDTO);
-        Coordinates updatedCoordinates = coordinatesService.updateCoordinates(id, coordinates);
-        if (updatedCoordinates != null) {
-            CoordinatesDTO updatedDTO = spaceMarineMapper.toCoordinatesDTO(updatedCoordinates);
-            
-            // Уведомляем всех клиентов об обновлении координат
-            SpaceMarineWebSocket.broadcast("coordinates_updated:" + id);
-            // Также уведомляем об обновлении SpaceMarine, которые используют эти координаты
-            SpaceMarineWebSocket.broadcast("updated");
-            
-            return ResponseEntity.ok(updatedDTO);
-        } else {
-            throw new EntityNotFoundException("Coordinates", id);
+        try {
+            Coordinates coordinates = spaceMarineMapper.toCoordinatesEntity(coordinatesDTO);
+            Coordinates updatedCoordinates = coordinatesService.updateCoordinates(id, coordinates);
+            if (updatedCoordinates != null) {
+                CoordinatesDTO updatedDTO = spaceMarineMapper.toCoordinatesDTO(updatedCoordinates);
+                
+                // Уведомляем всех клиентов об обновлении координат (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
+                try {
+                    SpaceMarineWebSocket.broadcast("coordinates_updated:" + id);
+                    // Также уведомляем об обновлении SpaceMarine, которые используют эти координаты
+                    SpaceMarineWebSocket.broadcast("updated");
+                } catch (Exception wsException) {
+                    // Логируем ошибку WebSocket, но не прерываем обработку HTTP запроса
+                    System.err.println("WebSocket broadcast error: " + wsException.getMessage());
+                }
+                
+                return ResponseEntity.ok(updatedDTO);
+            } else {
+                throw new EntityNotFoundException("Coordinates", id);
+            }
+        } catch (Exception e) {
+            // GlobalExceptionHandler обработает исключение
+            throw e;
         }
     }
 
@@ -96,10 +111,15 @@ public class CoordinatesController {
         try {
             boolean deleted = coordinatesService.deleteCoordinates(id);
             if (deleted) {
-                // Уведомляем всех клиентов об удалении координат
-                SpaceMarineWebSocket.broadcast("coordinates_deleted:" + id);
-                // Также уведомляем об обновлении SpaceMarine, которые использовали эти координаты
-                SpaceMarineWebSocket.broadcast("updated");
+                // Уведомляем всех клиентов об удалении координат (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
+                try {
+                    SpaceMarineWebSocket.broadcast("coordinates_deleted:" + id);
+                    // Также уведомляем об обновлении SpaceMarine, которые использовали эти координаты
+                    SpaceMarineWebSocket.broadcast("updated");
+                } catch (Exception wsException) {
+                    // Логируем ошибку WebSocket, но не прерываем обработку HTTP запроса
+                    System.err.println("WebSocket broadcast error: " + wsException.getMessage());
+                }
                 return ResponseEntity.noContent().build();
             } else {
                 throw new EntityNotFoundException("Coordinates", id);

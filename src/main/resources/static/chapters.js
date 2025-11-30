@@ -123,7 +123,7 @@ chaptersPage.startChapterEdit = function(cell, chapterData) {
             if (confirmed) {
                 const updatedData = {};
                 updatedData[field] = field === 'marinesCount' ? parseInt(newValue) : newValue;
-                await this.updateChapterInline(chapterData.id, updatedData, cell, newValue);
+                await this.updateChapterInline(chapterData.id, updatedData, cell, newValue, originalValue);
             } else {
                 cell.innerHTML = originalValue;
             }
@@ -152,7 +152,8 @@ chaptersPage.startChapterEdit = function(cell, chapterData) {
     });
 };
 
-chaptersPage.updateChapterInline = async function(chapterId, updatedData, cell, newValue) {
+chaptersPage.updateChapterInline = async function(chapterId, updatedData, cell, newValue, originalValue) {
+    const savedOriginalValue = originalValue || cell.dataset.original;
     try {
         // Сначала получаем полные данные главы
         const getRes = await fetch(`${this.apiBase}/${chapterId}`);
@@ -179,11 +180,29 @@ chaptersPage.updateChapterInline = async function(chapterId, updatedData, cell, 
                 Object.assign(item, updatedData);
             }
         } else {
-            throw new Error('Ошибка обновления');
+            // Пытаемся получить сообщение об ошибке из ответа
+            let errorMessage = 'Ошибка обновления';
+            try {
+                const contentType = res.headers.get('content-type');
+                if (contentType && contentType.includes('application/json')) {
+                    const errorData = await res.json();
+                    errorMessage = errorData.error || errorData.message || errorMessage;
+                } else {
+                    const text = await res.text();
+                    if (text) {
+                        errorMessage = text;
+                    }
+                }
+            } catch (parseError) {
+                // Если не удалось распарсить ошибку, используем дефолтное сообщение
+                errorMessage = `Ошибка обновления (${res.status})`;
+            }
+            throw new Error(errorMessage);
         }
     } catch (e) {
         await showAlert('Ошибка обновления: ' + e.message, 'Ошибка');
-        cell.innerHTML = cell.dataset.original;
+        cell.innerHTML = savedOriginalValue;
+        cell.dataset.original = savedOriginalValue;
     }
 };
 

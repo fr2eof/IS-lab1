@@ -37,10 +37,15 @@ public class ImportController {
             @RequestParam(defaultValue = "user") String username) {
         try {
             ImportResponseDTO response = importService.importFromFile(fileContent, username);
-            
+
             if ("SUCCESS".equals(response.status())) {
-                // Уведомляем всех клиентов об импорте
-                SpaceMarineWebSocket.broadcast("imported:" + response.createdObjectsCount());
+                // Уведомляем всех клиентов об импорте (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
+                try {
+                    SpaceMarineWebSocket.broadcast("imported:" + response.createdObjectsCount());
+                } catch (Exception wsException) {
+                    // Логируем ошибку WebSocket, но не прерываем обработку HTTP запроса
+                    System.err.println("WebSocket broadcast error: " + wsException.getMessage());
+                }
                 
                 return ResponseEntity.status(HttpStatus.CREATED)
                         .body(response);
@@ -70,8 +75,13 @@ public class ImportController {
             ImportResponseDTO response = importService.importSpaceMarines(request, username);
             
             if ("SUCCESS".equals(response.status())) {
-                // Уведомляем всех клиентов об импорте
-                SpaceMarineWebSocket.broadcast("imported:" + response.createdObjectsCount());
+                // Уведомляем всех клиентов об импорте (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
+                try {
+                    SpaceMarineWebSocket.broadcast("imported:" + response.createdObjectsCount());
+                } catch (Exception wsException) {
+                    // Логируем ошибку WebSocket, но не прерываем обработку HTTP запроса
+                    System.err.println("WebSocket broadcast error: " + wsException.getMessage());
+                }
                 
                 return ResponseEntity.status(HttpStatus.CREATED)
                         .body(response);
@@ -101,7 +111,13 @@ public class ImportController {
             ImportResponseDTO response = importService.importCoordinates(request, username);
             
             if ("SUCCESS".equals(response.status())) {
-                SpaceMarineWebSocket.broadcast("coordinates_imported:" + response.createdObjectsCount());
+                // Уведомляем всех клиентов об импорте (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
+                try {
+                    SpaceMarineWebSocket.broadcast("coordinates_imported:" + response.createdObjectsCount());
+                } catch (Exception wsException) {
+                    // Логируем ошибку WebSocket, но не прерываем обработку HTTP запроса
+                    System.err.println("WebSocket broadcast error: " + wsException.getMessage());
+                }
                 return ResponseEntity.status(HttpStatus.CREATED).body(response);
             } else {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
@@ -123,7 +139,13 @@ public class ImportController {
             ImportResponseDTO response = importService.importChapters(request, username);
             
             if ("SUCCESS".equals(response.status())) {
-                SpaceMarineWebSocket.broadcast("chapters_imported:" + response.createdObjectsCount());
+                // Уведомляем всех клиентов об импорте (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
+                try {
+                    SpaceMarineWebSocket.broadcast("chapters_imported:" + response.createdObjectsCount());
+                } catch (Exception wsException) {
+                    // Логируем ошибку WebSocket, но не прерываем обработку HTTP запроса
+                    System.err.println("WebSocket broadcast error: " + wsException.getMessage());
+                }
                 return ResponseEntity.status(HttpStatus.CREATED).body(response);
             } else {
                 return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);

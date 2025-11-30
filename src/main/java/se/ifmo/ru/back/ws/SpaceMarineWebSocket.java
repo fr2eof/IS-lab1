@@ -33,8 +33,19 @@ public class SpaceMarineWebSocket {
     }
 
     public static void broadcast(String message) {
-        for (Session session : sessions) {
-            session.getAsyncRemote().sendText(message);
+        Set<Session> sessionsCopy = Set.copyOf(sessions); // Копируем для безопасности
+        for (Session session : sessionsCopy) {
+            try {
+                if (session != null && session.isOpen()) {
+                    // Проверяем, что сессия открыта и готова к отправке
+                    session.getAsyncRemote().sendText(message);
+                }
+            } catch (Exception e) {
+                // Логируем ошибку, но не прерываем обработку для других сессий
+                System.err.println("Error broadcasting to WebSocket session: " + e.getMessage());
+                // Удаляем проблемную сессию из списка
+                sessions.remove(session);
+            }
         }
     }
 }

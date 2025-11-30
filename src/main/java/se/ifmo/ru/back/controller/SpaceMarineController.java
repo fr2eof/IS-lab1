@@ -73,8 +73,13 @@ public class SpaceMarineController {
         SpaceMarine createdSpaceMarine = spaceMarineService.createSpaceMarineFromDTO(spaceMarineDTO);
         SpaceMarineDTO createdDTO = spaceMarineMapper.toDTO(createdSpaceMarine);
         
-        // Уведомляем всех клиентов о создании
-        SpaceMarineWebSocket.broadcast("created:" + createdDTO.id());
+        // Уведомляем всех клиентов о создании (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
+        try {
+            SpaceMarineWebSocket.broadcast("created:" + createdDTO.id());
+        } catch (Exception wsException) {
+            // Логируем ошибку WebSocket, но не прерываем обработку HTTP запроса
+            System.err.println("WebSocket broadcast error: " + wsException.getMessage());
+        }
         
         return ResponseEntity.status(HttpStatus.CREATED).body(createdDTO);
     }
@@ -87,8 +92,13 @@ public class SpaceMarineController {
         if (updatedSpaceMarine != null) {
             SpaceMarineDTO updatedDTO = spaceMarineMapper.toDTO(updatedSpaceMarine);
             
-            // Уведомляем всех клиентов об обновлении
-            SpaceMarineWebSocket.broadcast("updated:" + id);
+            // Уведомляем всех клиентов об обновлении (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
+            try {
+                SpaceMarineWebSocket.broadcast("updated:" + id);
+            } catch (Exception wsException) {
+                // Логируем ошибку WebSocket, но не прерываем обработку HTTP запроса
+                System.err.println("WebSocket broadcast error: " + wsException.getMessage());
+            }
             
             return ResponseEntity.ok(updatedDTO);
         } else {
@@ -103,8 +113,13 @@ public class SpaceMarineController {
             @RequestParam(defaultValue = "false") boolean deleteChapter) {
         DeleteResponse deleteResult = spaceMarineService.deleteSpaceMarineWithDetails(id, deleteCoordinates, deleteChapter);
         if (deleteResult.message().contains("Десантник удален")) {
-            // Уведомляем всех клиентов об удалении
-            SpaceMarineWebSocket.broadcast("deleted:" + id);
+            // Уведомляем всех клиентов об удалении (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
+            try {
+                SpaceMarineWebSocket.broadcast("deleted:" + id);
+            } catch (Exception wsException) {
+                // Логируем ошибку WebSocket, но не прерываем обработку HTTP запроса
+                System.err.println("WebSocket broadcast error: " + wsException.getMessage());
+            }
             return ResponseEntity.ok(deleteResult);
         } else if (deleteResult.message().contains("не найден")) {
             throw new EntityNotFoundException("SpaceMarine", id);
@@ -161,8 +176,13 @@ public class SpaceMarineController {
                 throw new EntityNotFoundException("SpaceMarine", id);
             }
             
-            // Уведомляем клиентов об обновлении
-            SpaceMarineWebSocket.broadcast("updated");
+            // Уведомляем клиентов об обновлении (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
+            try {
+                SpaceMarineWebSocket.broadcast("updated");
+            } catch (Exception wsException) {
+                // Логируем ошибку WebSocket, но не прерываем обработку HTTP запроса
+                System.err.println("WebSocket broadcast error: " + wsException.getMessage());
+            }
             
             return ResponseEntity.ok().build();
         } catch (Exception e) {

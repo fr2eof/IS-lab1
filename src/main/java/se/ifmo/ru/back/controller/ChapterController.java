@@ -66,8 +66,13 @@ public class ChapterController {
         Chapter createdChapter = chapterService.createChapter(chapter);
         ChapterDTO createdDTO = spaceMarineMapper.toChapterDTO(createdChapter);
 
-        // Уведомляем всех клиентов о создании главы
-        SpaceMarineWebSocket.broadcast("chapter_created:" + createdDTO.id());
+        // Уведомляем всех клиентов о создании главы (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
+        try {
+            SpaceMarineWebSocket.broadcast("chapter_created:" + createdDTO.id());
+        } catch (Exception wsException) {
+            // Логируем ошибку WebSocket, но не прерываем обработку HTTP запроса
+            System.err.println("WebSocket broadcast error: " + wsException.getMessage());
+        }
 
         return ResponseEntity.status(HttpStatus.CREATED).body(createdDTO);
     }
@@ -81,10 +86,15 @@ public class ChapterController {
         if (updatedChapter != null) {
             ChapterDTO updatedDTO = spaceMarineMapper.toChapterDTO(updatedChapter);
 
-            // Уведомляем всех клиентов об обновлении главы
-            SpaceMarineWebSocket.broadcast("chapter_updated:" + id);
-            // Также уведомляем об обновлении SpaceMarine, которые используют эту главу
-            SpaceMarineWebSocket.broadcast("updated");
+            // Уведомляем всех клиентов об обновлении главы (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
+            try {
+                SpaceMarineWebSocket.broadcast("chapter_updated:" + id);
+                // Также уведомляем об обновлении SpaceMarine, которые используют эту главу
+                SpaceMarineWebSocket.broadcast("updated");
+            } catch (Exception wsException) {
+                // Логируем ошибку WebSocket, но не прерываем обработку HTTP запроса
+                System.err.println("WebSocket broadcast error: " + wsException.getMessage());
+            }
 
             return ResponseEntity.ok(updatedDTO);
         } else {
@@ -97,10 +107,15 @@ public class ChapterController {
         try {
             boolean deleted = chapterService.deleteChapter(id);
             if (deleted) {
-                // Уведомляем всех клиентов об удалении главы
-                SpaceMarineWebSocket.broadcast("chapter_deleted:" + id);
-                // Также уведомляем об обновлении SpaceMarine, которые использовали эту главу
-                SpaceMarineWebSocket.broadcast("updated");
+                // Уведомляем всех клиентов об удалении главы (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
+                try {
+                    SpaceMarineWebSocket.broadcast("chapter_deleted:" + id);
+                    // Также уведомляем об обновлении SpaceMarine, которые использовали эту главу
+                    SpaceMarineWebSocket.broadcast("updated");
+                } catch (Exception wsException) {
+                    // Логируем ошибку WebSocket, но не прерываем обработку HTTP запроса
+                    System.err.println("WebSocket broadcast error: " + wsException.getMessage());
+                }
                 return ResponseEntity.noContent().build();
             } else {
                 throw new EntityNotFoundException("Chapter", id);
