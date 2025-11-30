@@ -1,5 +1,7 @@
 package se.ifmo.ru.back.service.impl;
 
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -12,11 +14,13 @@ import se.ifmo.ru.back.dto.RelatedObjectsResponse;
 import se.ifmo.ru.back.dto.SpaceMarineDTO;
 import se.ifmo.ru.back.entity.Coordinates;
 import se.ifmo.ru.back.entity.SpaceMarine;
+import se.ifmo.ru.back.exception.ValidationException;
 import se.ifmo.ru.back.mapper.SpaceMarineMapper;
 import se.ifmo.ru.back.service.CoordinatesService;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -25,18 +29,30 @@ public class CoordinatesServiceImpl implements CoordinatesService {
     private final CoordinatesRepository coordinatesRepository;
     private final SpaceMarineRepository spaceMarineRepository;
     private final SpaceMarineMapper spaceMarineMapper;
+    private final Validator validator;
 
     public CoordinatesServiceImpl(
             CoordinatesRepository coordinatesRepository,
             SpaceMarineRepository spaceMarineRepository,
-            SpaceMarineMapper spaceMarineMapper) {
+            SpaceMarineMapper spaceMarineMapper,
+            Validator validator) {
         this.coordinatesRepository = coordinatesRepository;
         this.spaceMarineRepository = spaceMarineRepository;
         this.spaceMarineMapper = spaceMarineMapper;
+        this.validator = validator;
     }
 
     @Transactional
     public Coordinates createCoordinates(Coordinates coordinates) {
+        // Валидация сущности (включая кастомные валидаторы)
+        Set<ConstraintViolation<Coordinates>> violations = validator.validate(coordinates);
+        if (!violations.isEmpty()) {
+            String errorMessage = violations.stream()
+                    .map(ConstraintViolation::getMessage)
+                    .collect(Collectors.joining("; "));
+            throw new ValidationException(errorMessage);
+        }
+        
         return coordinatesRepository.save(coordinates);
     }
 
@@ -79,6 +95,17 @@ public class CoordinatesServiceImpl implements CoordinatesService {
             Coordinates coordinates = existingCoordinates.get();
             coordinates.setX(updatedCoordinates.getX());
             coordinates.setY(updatedCoordinates.getY());
+            
+            // Валидация сущности (включая кастомные валидаторы)
+            // ID уже установлен, поэтому валидатор исключит этот объект из проверки
+            Set<ConstraintViolation<Coordinates>> violations = validator.validate(coordinates);
+            if (!violations.isEmpty()) {
+                String errorMessage = violations.stream()
+                        .map(ConstraintViolation::getMessage)
+                        .collect(Collectors.joining("; "));
+                throw new ValidationException(errorMessage);
+            }
+            
             return coordinatesRepository.save(coordinates);
         }
         return null;

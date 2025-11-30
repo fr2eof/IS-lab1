@@ -6,6 +6,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+import se.ifmo.ru.back.validation.UniqueSpaceMarineInChapter;
 
 import java.time.ZonedDateTime;
 
@@ -15,6 +16,7 @@ import java.time.ZonedDateTime;
 @Setter
 @NoArgsConstructor
 @ToString(exclude = {"coordinates", "chapter"})
+@UniqueSpaceMarineInChapter
 public class SpaceMarine {
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "space_marine_seq")

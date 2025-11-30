@@ -1,5 +1,7 @@
 package se.ifmo.ru.back.service.impl;
 
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -12,11 +14,13 @@ import se.ifmo.ru.back.dto.RelatedObjectsResponse;
 import se.ifmo.ru.back.dto.SpaceMarineDTO;
 import se.ifmo.ru.back.entity.Chapter;
 import se.ifmo.ru.back.entity.SpaceMarine;
+import se.ifmo.ru.back.exception.ValidationException;
 import se.ifmo.ru.back.mapper.SpaceMarineMapper;
 import se.ifmo.ru.back.service.ChapterService;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -25,18 +29,30 @@ public class ChapterServiceImpl implements ChapterService {
     private final ChapterRepository chapterRepository;
     private final SpaceMarineRepository spaceMarineRepository;
     private final SpaceMarineMapper spaceMarineMapper;
+    private final Validator validator;
 
     public ChapterServiceImpl(
             ChapterRepository chapterRepository,
             SpaceMarineRepository spaceMarineRepository,
-            SpaceMarineMapper spaceMarineMapper) {
+            SpaceMarineMapper spaceMarineMapper,
+            Validator validator) {
         this.chapterRepository = chapterRepository;
         this.spaceMarineRepository = spaceMarineRepository;
         this.spaceMarineMapper = spaceMarineMapper;
+        this.validator = validator;
     }
 
     @Transactional
     public Chapter createChapter(Chapter chapter) {
+        // Валидация сущности (включая кастомные валидаторы)
+        Set<ConstraintViolation<Chapter>> violations = validator.validate(chapter);
+        if (!violations.isEmpty()) {
+            String errorMessage = violations.stream()
+                    .map(ConstraintViolation::getMessage)
+                    .collect(Collectors.joining("; "));
+            throw new ValidationException(errorMessage);
+        }
+        
         return chapterRepository.save(chapter);
     }
 
@@ -83,6 +99,17 @@ public class ChapterServiceImpl implements ChapterService {
             Chapter chapter = existingChapter.get();
             chapter.setName(updatedChapter.getName());
             chapter.setMarinesCount(updatedChapter.getMarinesCount());
+            
+            // Валидация сущности (включая кастомные валидаторы)
+            // ID уже установлен, поэтому валидатор исключит этот объект из проверки
+            Set<ConstraintViolation<Chapter>> violations = validator.validate(chapter);
+            if (!violations.isEmpty()) {
+                String errorMessage = violations.stream()
+                        .map(ConstraintViolation::getMessage)
+                        .collect(Collectors.joining("; "));
+                throw new ValidationException(errorMessage);
+            }
+            
             return chapterRepository.save(chapter);
         }
         return null;

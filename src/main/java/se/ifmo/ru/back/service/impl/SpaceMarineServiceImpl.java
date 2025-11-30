@@ -1,5 +1,7 @@
 package se.ifmo.ru.back.service.impl;
 
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.Validator;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -12,6 +14,7 @@ import se.ifmo.ru.back.repository.CoordinatesRepository;
 import se.ifmo.ru.back.repository.SpaceMarineRepository;
 import se.ifmo.ru.back.entity.*;
 import se.ifmo.ru.back.exception.EntityNotFoundException;
+import se.ifmo.ru.back.exception.ValidationException;
 import se.ifmo.ru.back.mapper.SpaceMarineMapper;
 import se.ifmo.ru.back.service.ChapterService;
 import se.ifmo.ru.back.service.CoordinatesService;
@@ -19,6 +22,8 @@ import se.ifmo.ru.back.service.SpaceMarineService;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class SpaceMarineServiceImpl implements SpaceMarineService {
@@ -29,6 +34,7 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
     private final ChapterService chapterService;
     private final CoordinatesService coordinatesService;
     private final SpaceMarineMapper spaceMarineMapper;
+    private final Validator validator;
 
     public SpaceMarineServiceImpl(
             SpaceMarineRepository spaceMarineRepository,
@@ -36,17 +42,28 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
             CoordinatesRepository coordinatesRepository,
             ChapterService chapterService,
             CoordinatesService coordinatesService,
-            SpaceMarineMapper spaceMarineMapper) {
+            SpaceMarineMapper spaceMarineMapper,
+            Validator validator) {
         this.spaceMarineRepository = spaceMarineRepository;
         this.chapterRepository = chapterRepository;
         this.coordinatesRepository = coordinatesRepository;
         this.chapterService = chapterService;
         this.coordinatesService = coordinatesService;
         this.spaceMarineMapper = spaceMarineMapper;
+        this.validator = validator;
     }
 
     @Transactional
     public SpaceMarine createSpaceMarine(SpaceMarine spaceMarine) {
+        // Валидация сущности (включая кастомные валидаторы)
+        Set<ConstraintViolation<SpaceMarine>> violations = validator.validate(spaceMarine);
+        if (!violations.isEmpty()) {
+            String errorMessage = violations.stream()
+                    .map(ConstraintViolation::getMessage)
+                    .collect(Collectors.joining("; "));
+            throw new ValidationException(errorMessage);
+        }
+        
         if (spaceMarine.getChapter() != null && spaceMarine.getChapter().getId() != null) {
             Optional<Chapter> existingChapter = chapterRepository.findById(spaceMarine.getChapter().getId());
             if (existingChapter.isPresent()) {
@@ -100,6 +117,15 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
             } else {
                 throw new EntityNotFoundException("Chapter", dto.chapterId());
             }
+        }
+        
+        // Валидация сущности (включая кастомные валидаторы)
+        Set<ConstraintViolation<SpaceMarine>> violations = validator.validate(spaceMarine);
+        if (!violations.isEmpty()) {
+            String errorMessage = violations.stream()
+                    .map(ConstraintViolation::getMessage)
+                    .collect(Collectors.joining("; "));
+            throw new ValidationException(errorMessage);
         }
         
         // Сначала сохраняем SpaceMarine
@@ -192,6 +218,16 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
             spaceMarine.setCategory(updatedSpaceMarine.getCategory());
             spaceMarine.setWeaponType(updatedSpaceMarine.getWeaponType());
             
+            // Валидация сущности (включая кастомные валидаторы)
+            // ID уже установлен, поэтому валидатор исключит этот объект из проверки
+            Set<ConstraintViolation<SpaceMarine>> violations = validator.validate(spaceMarine);
+            if (!violations.isEmpty()) {
+                String errorMessage = violations.stream()
+                        .map(ConstraintViolation::getMessage)
+                        .collect(Collectors.joining("; "));
+                throw new ValidationException(errorMessage);
+            }
+            
             return spaceMarineRepository.save(spaceMarine);
         }
         return null;
@@ -256,6 +292,16 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
             }
         } else {
             spaceMarine.setChapter(null);
+        }
+        
+        // Валидация сущности (включая кастомные валидаторы)
+        // ID уже установлен, поэтому валидатор исключит этот объект из проверки
+        Set<ConstraintViolation<SpaceMarine>> violations = validator.validate(spaceMarine);
+        if (!violations.isEmpty()) {
+            String errorMessage = violations.stream()
+                    .map(ConstraintViolation::getMessage)
+                    .collect(Collectors.joining("; "));
+            throw new ValidationException(errorMessage);
         }
         
         // Сначала обновляем SpaceMarine

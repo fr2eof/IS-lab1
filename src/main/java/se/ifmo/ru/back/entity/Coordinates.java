@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+import se.ifmo.ru.back.validation.UniqueFields;
 
 @Entity
 @Table(name = "coordinates")
@@ -15,6 +16,7 @@ import lombok.ToString;
 @NoArgsConstructor
 @AllArgsConstructor
 @ToString
+@UniqueFields(fields = {"x", "y"}, message = "Координаты с такими значениями x и y уже существуют")
 public class Coordinates {
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "coordinates_seq")

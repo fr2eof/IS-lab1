@@ -174,6 +174,17 @@ public class ImportServiceImpl implements ImportService {
                         coordinates = new Coordinates();
                         coordinates.setX(coordDTO.x());
                         coordinates.setY(coordDTO.y());
+                        
+                        // Валидация сущности (включая кастомные валидаторы)
+                        Set<ConstraintViolation<Coordinates>> coordViolations = validator.validate(coordinates);
+                        if (!coordViolations.isEmpty()) {
+                            String errorMsg = coordViolations.stream()
+                                    .map(ConstraintViolation::getMessage)
+                                    .collect(Collectors.joining("; "));
+                            validationErrors.add("Объект #" + (i + 1) + ", координаты: " + errorMsg);
+                            continue;
+                        }
+                        
                         coordinates = coordinatesRepository.save(coordinates);
                     }
 
@@ -209,6 +220,17 @@ public class ImportServiceImpl implements ImportService {
                             chapter = new Chapter();
                             chapter.setName(chapterDTO.name());
                             chapter.setMarinesCount(1);
+                            
+                            // Валидация сущности (включая кастомные валидаторы)
+                            Set<ConstraintViolation<Chapter>> chapterViolations = validator.validate(chapter);
+                            if (!chapterViolations.isEmpty()) {
+                                String errorMsg = chapterViolations.stream()
+                                        .map(ConstraintViolation::getMessage)
+                                        .collect(Collectors.joining("; "));
+                                validationErrors.add("Объект #" + (i + 1) + ", глава: " + errorMsg);
+                                continue;
+                            }
+                            
                             chapter = chapterRepository.save(chapter);
                             isNewChapter = true;
                         }
@@ -238,6 +260,16 @@ public class ImportServiceImpl implements ImportService {
                         } catch (IllegalArgumentException e) {
                             throw new ValidationException("Неверный тип оружия: " + importDTO.weaponType());
                         }
+                    }
+
+                    // Валидация сущности (включая кастомные валидаторы)
+                    Set<ConstraintViolation<SpaceMarine>> marineViolations = validator.validate(spaceMarine);
+                    if (!marineViolations.isEmpty()) {
+                        String errorMsg = marineViolations.stream()
+                                .map(ConstraintViolation::getMessage)
+                                .collect(Collectors.joining("; "));
+                        validationErrors.add("Объект #" + (i + 1) + ": " + errorMsg);
+                        continue;
                     }
 
                     // Сохраняем SpaceMarine
@@ -652,6 +684,17 @@ public class ImportServiceImpl implements ImportService {
                     Coordinates coordinates = new Coordinates();
                     coordinates.setX(coordDTO.x());
                     coordinates.setY(coordDTO.y());
+                    
+                    // Валидация сущности (включая кастомные валидаторы)
+                    Set<ConstraintViolation<Coordinates>> coordViolations = validator.validate(coordinates);
+                    if (!coordViolations.isEmpty()) {
+                        String errorMsg = coordViolations.stream()
+                                .map(ConstraintViolation::getMessage)
+                                .collect(Collectors.joining("; "));
+                        validationErrors.add("Координаты #" + (i + 1) + ": " + errorMsg);
+                        continue;
+                    }
+                    
                     coordinates = coordinatesRepository.save(coordinates);
                     createdCoordinates.add(coordinates);
 
@@ -752,16 +795,20 @@ public class ImportServiceImpl implements ImportService {
                         continue;
                     }
 
-                    // Проверяем, существует ли уже глава с таким именем
-                    Optional<Chapter> existingChapter = chapterRepository.findByName(chapterDTO.name());
-                    if (existingChapter.isPresent()) {
-                        validationErrors.add("Глава #" + (i + 1) + ": Глава с именем '" + chapterDTO.name() + "' уже существует");
-                        continue;
-                    }
-
                     Chapter chapter = new Chapter();
                     chapter.setName(chapterDTO.name());
                     chapter.setMarinesCount(chapterDTO.marinesCount());
+                    
+                    // Валидация сущности (включая кастомные валидаторы)
+                    Set<ConstraintViolation<Chapter>> chapterViolations = validator.validate(chapter);
+                    if (!chapterViolations.isEmpty()) {
+                        String errorMsg = chapterViolations.stream()
+                                .map(ConstraintViolation::getMessage)
+                                .collect(Collectors.joining("; "));
+                        validationErrors.add("Глава #" + (i + 1) + ": " + errorMsg);
+                        continue;
+                    }
+                    
                     chapter = chapterRepository.save(chapter);
                     createdChapters.add(chapter);
 

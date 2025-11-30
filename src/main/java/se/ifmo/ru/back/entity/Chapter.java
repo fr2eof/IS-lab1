@@ -10,6 +10,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+import se.ifmo.ru.back.validation.UniqueFields;
 
 @Entity
 @Table(name = "chapters")
@@ -18,6 +19,7 @@ import lombok.ToString;
 @NoArgsConstructor
 @AllArgsConstructor
 @ToString
+@UniqueFields(fields = {"name", "marinesCount"}, message = "Глава с таким именем и количеством маринов уже существует")
 public class Chapter {
     @Id
     @GeneratedValue(strategy = GenerationType.SEQUENCE, generator = "chapter_seq")
