@@ -1,0 +1,274 @@
+@startuml
+title Архитектура приложения Space Marines
+
+
+skinparam packageStyle rectangle
+skinparam linetype ortho
+
+package "Уровень представления" {
+    class Frontend
+    class WSClient
+}
+
+package "Уровень REST API" {
+    class SpaceMarineResource {
+        +getSpaceMarines()
+        +getSpaceMarineById()
+        +createSpaceMarine()
+        +updateSpaceMarine()
+        +deleteSpaceMarine()
+    }
+    
+    class ChapterResource {
+        +getAllChapters()
+        +getChapterById()
+        +createChapter()
+        +updateChapter()
+        +deleteChapter()
+    }
+    
+    class CoordinatesResource {
+        +getAllCoordinates()
+        +getCoordinatesById()
+        +createCoordinates()
+        +updateCoordinates()
+        +deleteCoordinates()
+    }
+    
+    class SpecialOperationsResource {
+        +getAverageHeartCount()
+        +countMarinesByHealth()
+        +findMarinesByNameContaining()
+    }
+    
+    class GlobalExceptionHandler {
+        +toResponse()
+    }
+}
+
+package "Уровень бизнес-логики" {
+    interface SpaceMarineService {
+        +createSpaceMarine()
+        +updateSpaceMarine()
+        +deleteSpaceMarine()
+        +getSpaceMarines()
+    }
+    
+    class SpaceMarineServiceImpl {
+        +createSpaceMarine()
+        +updateSpaceMarine()
+        +deleteSpaceMarine()
+    }
+    
+    interface ChapterService {
+        +createChapter()
+        +updateChapter()
+        +deleteChapter()
+    }
+    
+    class ChapterServiceImpl {
+        +createChapter()
+        +updateChapter()
+        +deleteChapter()
+    }
+    
+    interface CoordinatesService {
+        +createCoordinates()
+        +updateCoordinates()
+        +deleteCoordinates()
+    }
+    
+    class CoordinatesServiceImpl {
+        +createCoordinates()
+        +updateCoordinates()
+        +deleteCoordinates()
+    }
+    
+    interface SpecialOperationsService {
+        +getAverageHeartCount()
+        +countMarinesByHealth()
+    }
+    
+    class SpecialOperationsServiceImpl {
+        +getAverageHeartCount()
+        +countMarinesByHealth()
+    }
+    
+    class SpaceMarineMapper {
+        +toSpaceMarineDTO()
+        +toChapterDTO()
+        +toCoordinatesDTO()
+    }
+}
+
+package "Уровень доступа к данным" {
+    class SpaceMarineDAO {
+        +save()
+        +findById()
+        +findAll()
+        +update()
+        +delete()
+        +count()
+    }
+    
+    class ChapterDAO {
+        +save()
+        +findById()
+        +findAll()
+        +update()
+        +delete()
+        +count()
+    }
+    
+    class CoordinatesDAO {
+        +save()
+        +findById()
+        +findAll()
+        +update()
+        +delete()
+        +count()
+    }
+    
+    class SpecialOperationsDAO {
+        +getAverageHeartCount()
+        +countMarinesByHealth()
+        +findMarinesByNameContaining()
+    }
+}
+
+package "Уровень JPA/Entity" {
+    class SpaceMarine {
+        -Integer id
+        -String name
+        -Integer health
+        -Integer heartCount
+        -Coordinates coordinates
+        -Chapter chapter
+    }
+    
+    class Chapter {
+        -Long id
+        -String name
+        -int marinesCount
+    }
+    
+    class Coordinates {
+        -Long id
+        -Float x
+        -Double y
+    }
+    
+    enum AstartesCategory {
+        ASSAULT
+        SUPPRESSOR
+        TERMINATOR
+        CHAPLAIN
+    }
+    
+    enum Weapon {
+        BOLT_PISTOL
+        COMBI_FLAMER
+        FLAMER
+        MULTI_MELTA
+    }
+}
+
+package "Конфигурация" {
+    class EntityManagerProducer {
+        +EntityManager
+    }
+}
+
+package "WebSocket" {
+    class SpaceMarineWebSocket {
+        +onOpen()
+        +onMessage()
+        +broadcast()
+    }
+}
+
+package "База данных" {
+    class DB_SpaceMarine
+    class DB_Chapter
+    class DB_Coordinates
+}
+
+' Связи между уровнями
+Frontend --> SpaceMarineResource
+Frontend --> ChapterResource
+Frontend --> CoordinatesResource
+Frontend --> SpecialOperationsResource
+WSClient --> SpaceMarineWebSocket
+
+SpaceMarineResource --> SpaceMarineService
+SpaceMarineResource --> SpaceMarineMapper
+SpaceMarineResource --> SpaceMarineWebSocket
+ChapterResource --> ChapterService
+ChapterResource --> SpaceMarineMapper
+CoordinatesResource --> CoordinatesService
+CoordinatesResource --> SpaceMarineMapper
+SpecialOperationsResource --> SpecialOperationsService
+GlobalExceptionHandler ..> SpaceMarineResource
+GlobalExceptionHandler ..> ChapterResource
+GlobalExceptionHandler ..> CoordinatesResource
+GlobalExceptionHandler ..> SpecialOperationsResource
+
+SpaceMarineService <|.. SpaceMarineServiceImpl
+ChapterService <|.. ChapterServiceImpl
+CoordinatesService <|.. CoordinatesServiceImpl
+SpecialOperationsService <|.. SpecialOperationsServiceImpl
+
+SpaceMarineServiceImpl --> SpaceMarineDAO
+SpaceMarineServiceImpl --> ChapterDAO
+SpaceMarineServiceImpl --> CoordinatesDAO
+SpaceMarineServiceImpl --> ChapterService
+SpaceMarineServiceImpl --> CoordinatesService
+SpaceMarineServiceImpl --> SpaceMarineMapper
+ChapterServiceImpl --> ChapterDAO
+ChapterServiceImpl --> SpaceMarineDAO
+ChapterServiceImpl --> SpaceMarineMapper
+CoordinatesServiceImpl --> CoordinatesDAO
+CoordinatesServiceImpl --> SpaceMarineDAO
+CoordinatesServiceImpl --> SpaceMarineMapper
+SpecialOperationsServiceImpl --> SpecialOperationsDAO
+
+SpaceMarineDAO --> EntityManagerProducer
+ChapterDAO --> EntityManagerProducer
+CoordinatesDAO --> EntityManagerProducer
+SpecialOperationsDAO --> EntityManagerProducer
+
+EntityManagerProducer --> SpaceMarine
+EntityManagerProducer --> Chapter
+EntityManagerProducer --> Coordinates
+
+SpaceMarine --> Coordinates : ManyToOne
+SpaceMarine --> Chapter : ManyToOne
+
+SpaceMarineDAO --> SpaceMarine
+ChapterDAO --> Chapter
+CoordinatesDAO --> Coordinates
+SpecialOperationsDAO --> SpaceMarine
+
+SpaceMarine --> DB_SpaceMarine
+Chapter --> DB_Chapter
+Coordinates --> DB_Coordinates
+
+note right of SpaceMarineServiceImpl
+@ApplicationScoped
+@Transactional
+для create/update/delete
+end note
+
+note right of SpaceMarineDAO
+@ApplicationScoped
+@PersistenceContext
+EntityManager
+end note
+
+note right of SpaceMarine
+@Entity
+@Table
+@ManyToOne
+end note
+
+@enduml
