@@ -119,7 +119,18 @@ public class ImportServiceImpl implements ImportService {
                         continue;
                     }
 
-                    // Валидация вложенных объектов
+                    // Валидация координат - должны быть либо coordinatesId, либо coordinates
+                    if (importDTO.coordinatesId() == null && importDTO.coordinates() == null) {
+                        validationErrors.add("Объект #" + (i + 1) + ": Необходимо указать либо coordinatesId, либо coordinates");
+                        continue;
+                    }
+                    
+                    if (importDTO.coordinatesId() != null && importDTO.coordinates() != null) {
+                        validationErrors.add("Объект #" + (i + 1) + ": Нельзя указывать одновременно coordinatesId и coordinates");
+                        continue;
+                    }
+
+                    // Валидация вложенных объектов, если указаны
                     if (importDTO.coordinates() != null) {
                         Set<ConstraintViolation<CoordinatesDTO>> coordViolations = validator.validate(importDTO.coordinates());
                         if (!coordViolations.isEmpty()) {
@@ -141,36 +152,60 @@ public class ImportServiceImpl implements ImportService {
                             continue;
                         }
                     }
+                    
+                    if (importDTO.chapterId() != null && importDTO.chapter() != null) {
+                        validationErrors.add("Объект #" + (i + 1) + ": Нельзя указывать одновременно chapterId и chapter");
+                        continue;
+                    }
 
                     // Создаем или находим Coordinates
                     Coordinates coordinates;
-                    if (importDTO.coordinates() != null) {
+                    if (importDTO.coordinatesId() != null) {
+                        // Используем существующие координаты по ID
+                        Optional<Coordinates> existingCoords = coordinatesRepository.findById(importDTO.coordinatesId());
+                        if (existingCoords.isEmpty()) {
+                            validationErrors.add("Объект #" + (i + 1) + ": Координаты с ID " + importDTO.coordinatesId() + " не найдены");
+                            continue;
+                        }
+                        coordinates = existingCoords.get();
+                    } else {
+                        // Создаем новые координаты
                         CoordinatesDTO coordDTO = importDTO.coordinates();
-                        // Для импорта всегда создаем новые координаты
                         coordinates = new Coordinates();
                         coordinates.setX(coordDTO.x());
                         coordinates.setY(coordDTO.y());
                         coordinates = coordinatesRepository.save(coordinates);
-                    } else {
-                        throw new ValidationException("Координаты обязательны для SpaceMarine");
                     }
 
                     // Создаем или находим Chapter
                     Chapter chapter = null;
                     boolean isNewChapter = false;
-                    if (importDTO.chapter() != null) {
+                    if (importDTO.chapterId() != null) {
+                        // Используем существующую главу по ID
+                        Optional<Chapter> existingChapter = chapterRepository.findById(importDTO.chapterId());
+                        if (existingChapter.isEmpty()) {
+                            validationErrors.add("Объект #" + (i + 1) + ": Глава с ID " + importDTO.chapterId() + " не найдена");
+                            continue;
+                        }
+                        chapter = existingChapter.get();
+                        // Проверяем, не превышен ли лимит маринов в главе
+                        if (chapter.getMarinesCount() >= 1000) {
+                            validationErrors.add("Объект #" + (i + 1) + ": Глава " + chapter.getName() + " уже содержит максимальное количество маринов (1000)");
+                            continue;
+                        }
+                    } else if (importDTO.chapter() != null) {
+                        // Создаем новую главу или ищем по имени
                         ChapterDTO chapterDTO = importDTO.chapter();
-                        // Ищем существующую главу по имени
                         Optional<Chapter> existingChapter = chapterRepository.findByName(chapterDTO.name());
                         if (existingChapter.isPresent()) {
                             chapter = existingChapter.get();
                             // Проверяем, не превышен ли лимит маринов в главе
                             if (chapter.getMarinesCount() >= 1000) {
-                                throw new ValidationException("Глава " + chapter.getName() + " уже содержит максимальное количество маринов (1000)");
+                                validationErrors.add("Объект #" + (i + 1) + ": Глава " + chapter.getName() + " уже содержит максимальное количество маринов (1000)");
+                                continue;
                             }
                         } else {
                             // При создании нового Chapter счетчик должен быть 1, так как мы сразу добавляем марина
-                            // И валидация требует минимум 1 марина
                             chapter = new Chapter();
                             chapter.setName(chapterDTO.name());
                             chapter.setMarinesCount(1);
@@ -422,8 +457,12 @@ public class ImportServiceImpl implements ImportService {
     private SpaceMarineImportDTO parseSpaceMarineDTO(JsonObject json) {
         String name = json.containsKey("name") ? json.getString("name") : null;
         
+        // Обработка coordinatesId или coordinates
+        Long coordinatesId = null;
         CoordinatesDTO coordinatesDTO = null;
-        if (json.containsKey("coordinates")) {
+        if (json.containsKey("coordinatesId")) {
+            coordinatesId = json.getJsonNumber("coordinatesId").longValue();
+        } else if (json.containsKey("coordinates")) {
             jakarta.json.JsonObject coordsJson = json.getJsonObject("coordinates");
             Float x = coordsJson.containsKey("x") ? (float) coordsJson.getJsonNumber("x").doubleValue() : null;
             Double y = coordsJson.containsKey("y") && !coordsJson.isNull("y") 
@@ -432,8 +471,12 @@ public class ImportServiceImpl implements ImportService {
             coordinatesDTO = new CoordinatesDTO(null, x, y);
         }
         
+        // Обработка chapterId или chapter
+        Long chapterId = null;
         ChapterDTO chapterDTO = null;
-        if (json.containsKey("chapter")) {
+        if (json.containsKey("chapterId")) {
+            chapterId = json.getJsonNumber("chapterId").longValue();
+        } else if (json.containsKey("chapter")) {
             jakarta.json.JsonObject chapterJson = json.getJsonObject("chapter");
             String chapterName = chapterJson.containsKey("name") ? chapterJson.getString("name") : null;
             Integer marinesCount = chapterJson.containsKey("marinesCount") 
@@ -449,7 +492,9 @@ public class ImportServiceImpl implements ImportService {
         
         return new SpaceMarineImportDTO(
                 name,
+                coordinatesId,
                 coordinatesDTO,
+                chapterId,
                 chapterDTO,
                 health,
                 heartCount,
@@ -560,6 +605,219 @@ public class ImportServiceImpl implements ImportService {
             return toDTO(ih);
         }
         throw new EntityNotFoundException("ImportHistory", id);
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    @Override
+    public ImportResponseDTO importCoordinates(ImportCoordinatesRequestDTO request, String username) {
+        ImportHistory importHistory = new ImportHistory();
+        importHistory.setUsername(username);
+        importHistory.setStatus(ImportStatus.PENDING);
+        importHistory = importHistoryRepository.save(importHistory);
+
+        try {
+            Set<ConstraintViolation<ImportCoordinatesRequestDTO>> requestViolations = validator.validate(request);
+            if (!requestViolations.isEmpty()) {
+                String errorMessage = requestViolations.stream()
+                        .map(ConstraintViolation::getMessage)
+                        .collect(Collectors.joining("; "));
+                importHistory.setStatus(ImportStatus.FAILED);
+                importHistory.setErrorMessage("Ошибка валидации запроса: " + errorMessage);
+                importHistory = importHistoryRepository.save(importHistory);
+                return new ImportResponseDTO(
+                        importHistory.getId(),
+                        "FAILED",
+                        0,
+                        "Ошибка валидации",
+                        errorMessage
+                );
+            }
+
+            List<Coordinates> createdCoordinates = new ArrayList<>();
+            List<String> validationErrors = new ArrayList<>();
+
+            for (int i = 0; i < request.coordinates().size(); i++) {
+                CoordinatesDTO coordDTO = request.coordinates().get(i);
+                
+                try {
+                    Set<ConstraintViolation<CoordinatesDTO>> violations = validator.validate(coordDTO);
+                    if (!violations.isEmpty()) {
+                        String errorMsg = violations.stream()
+                                .map(ConstraintViolation::getMessage)
+                                .collect(Collectors.joining("; "));
+                        validationErrors.add("Координаты #" + (i + 1) + ": " + errorMsg);
+                        continue;
+                    }
+
+                    Coordinates coordinates = new Coordinates();
+                    coordinates.setX(coordDTO.x());
+                    coordinates.setY(coordDTO.y());
+                    coordinates = coordinatesRepository.save(coordinates);
+                    createdCoordinates.add(coordinates);
+
+                } catch (Exception e) {
+                    validationErrors.add("Координаты #" + (i + 1) + ": " + e.getMessage());
+                }
+            }
+
+            if (!validationErrors.isEmpty()) {
+                String errorMessage = String.join("; ", validationErrors);
+                importHistory.setStatus(ImportStatus.FAILED);
+                importHistory.setErrorMessage(errorMessage);
+                importHistory = importHistoryRepository.save(importHistory);
+                return new ImportResponseDTO(
+                        importHistory.getId(),
+                        "FAILED",
+                        0,
+                        "Ошибки при импорте",
+                        errorMessage
+                );
+            }
+
+            if (createdCoordinates.isEmpty()) {
+                String errorMessage = "Не было создано ни одного объекта";
+                importHistory.setStatus(ImportStatus.FAILED);
+                importHistory.setErrorMessage(errorMessage);
+                importHistory = importHistoryRepository.save(importHistory);
+                return new ImportResponseDTO(
+                        importHistory.getId(),
+                        "FAILED",
+                        0,
+                        "Ошибка импорта",
+                        errorMessage
+                );
+            }
+
+            importHistory.setStatus(ImportStatus.SUCCESS);
+            importHistory.setCreatedObjectsCount(createdCoordinates.size());
+            importHistory.setErrorMessage(null);
+            importHistory = importHistoryRepository.save(importHistory);
+
+            return new ImportResponseDTO(
+                    importHistory.getId(),
+                    "SUCCESS",
+                    createdCoordinates.size(),
+                    "Успешно импортировано " + createdCoordinates.size() + " координат"
+            );
+
+        } catch (Exception e) {
+            importHistory.setStatus(ImportStatus.FAILED);
+            if (importHistory.getErrorMessage() == null) {
+                importHistory.setErrorMessage(e.getMessage());
+            }
+            importHistory = importHistoryRepository.save(importHistory);
+            throw e;
+        }
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    @Override
+    public ImportResponseDTO importChapters(ImportChaptersRequestDTO request, String username) {
+        ImportHistory importHistory = new ImportHistory();
+        importHistory.setUsername(username);
+        importHistory.setStatus(ImportStatus.PENDING);
+        importHistory = importHistoryRepository.save(importHistory);
+
+        try {
+            Set<ConstraintViolation<ImportChaptersRequestDTO>> requestViolations = validator.validate(request);
+            if (!requestViolations.isEmpty()) {
+                String errorMessage = requestViolations.stream()
+                        .map(ConstraintViolation::getMessage)
+                        .collect(Collectors.joining("; "));
+                importHistory.setStatus(ImportStatus.FAILED);
+                importHistory.setErrorMessage("Ошибка валидации запроса: " + errorMessage);
+                importHistory = importHistoryRepository.save(importHistory);
+                return new ImportResponseDTO(
+                        importHistory.getId(),
+                        "FAILED",
+                        0,
+                        "Ошибка валидации",
+                        errorMessage
+                );
+            }
+
+            List<Chapter> createdChapters = new ArrayList<>();
+            List<String> validationErrors = new ArrayList<>();
+
+            for (int i = 0; i < request.chapters().size(); i++) {
+                ChapterDTO chapterDTO = request.chapters().get(i);
+                
+                try {
+                    Set<ConstraintViolation<ChapterDTO>> violations = validator.validate(chapterDTO);
+                    if (!violations.isEmpty()) {
+                        String errorMsg = violations.stream()
+                                .map(ConstraintViolation::getMessage)
+                                .collect(Collectors.joining("; "));
+                        validationErrors.add("Глава #" + (i + 1) + ": " + errorMsg);
+                        continue;
+                    }
+
+                    // Проверяем, существует ли уже глава с таким именем
+                    Optional<Chapter> existingChapter = chapterRepository.findByName(chapterDTO.name());
+                    if (existingChapter.isPresent()) {
+                        validationErrors.add("Глава #" + (i + 1) + ": Глава с именем '" + chapterDTO.name() + "' уже существует");
+                        continue;
+                    }
+
+                    Chapter chapter = new Chapter();
+                    chapter.setName(chapterDTO.name());
+                    chapter.setMarinesCount(chapterDTO.marinesCount());
+                    chapter = chapterRepository.save(chapter);
+                    createdChapters.add(chapter);
+
+                } catch (Exception e) {
+                    validationErrors.add("Глава #" + (i + 1) + ": " + e.getMessage());
+                }
+            }
+
+            if (!validationErrors.isEmpty()) {
+                String errorMessage = String.join("; ", validationErrors);
+                importHistory.setStatus(ImportStatus.FAILED);
+                importHistory.setErrorMessage(errorMessage);
+                importHistory = importHistoryRepository.save(importHistory);
+                return new ImportResponseDTO(
+                        importHistory.getId(),
+                        "FAILED",
+                        0,
+                        "Ошибки при импорте",
+                        errorMessage
+                );
+            }
+
+            if (createdChapters.isEmpty()) {
+                String errorMessage = "Не было создано ни одного объекта";
+                importHistory.setStatus(ImportStatus.FAILED);
+                importHistory.setErrorMessage(errorMessage);
+                importHistory = importHistoryRepository.save(importHistory);
+                return new ImportResponseDTO(
+                        importHistory.getId(),
+                        "FAILED",
+                        0,
+                        "Ошибка импорта",
+                        errorMessage
+                );
+            }
+
+            importHistory.setStatus(ImportStatus.SUCCESS);
+            importHistory.setCreatedObjectsCount(createdChapters.size());
+            importHistory.setErrorMessage(null);
+            importHistory = importHistoryRepository.save(importHistory);
+
+            return new ImportResponseDTO(
+                    importHistory.getId(),
+                    "SUCCESS",
+                    createdChapters.size(),
+                    "Успешно импортировано " + createdChapters.size() + " глав"
+            );
+
+        } catch (Exception e) {
+            importHistory.setStatus(ImportStatus.FAILED);
+            if (importHistory.getErrorMessage() == null) {
+                importHistory.setErrorMessage(e.getMessage());
+            }
+            importHistory = importHistoryRepository.save(importHistory);
+            throw e;
+        }
     }
 
     private ImportHistoryDTO toDTO(ImportHistory entity) {

@@ -10,9 +10,14 @@ public record SpaceMarineImportDTO(
         @NotBlank(message = "Name cannot be null or empty")
         String name,
         
+        // Либо coordinatesId (для существующих координат), либо coordinates (для создания новых)
+        Long coordinatesId,
+        
         @Valid
-        @NotNull(message = "Coordinates cannot be null")
         CoordinatesDTO coordinates,
+        
+        // Либо chapterId (для существующей главы), либо chapter (для создания новой)
+        Long chapterId,
         
         @Valid
         ChapterDTO chapter,

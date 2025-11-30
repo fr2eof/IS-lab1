@@ -509,3 +509,42 @@ form input, form select {
     border-radius: 5px;
     margin-top: 10px;
 }
+
+/* Вкладки для импорта */
+.tabs {
+    display: flex;
+    gap: 10px;
+    margin: 20px 0;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.tab-button {
+    background-color: #f8f9fa;
+    color: #495057;
+    border: none;
+    border-bottom: 3px solid transparent;
+    padding: 12px 20px;
+    cursor: pointer;
+    font-size: 15px;
+    transition: all 0.3s;
+    border-radius: 5px 5px 0 0;
+}
+
+.tab-button:hover {
+    background-color: #e9ecef;
+}
+
+.tab-button.active {
+    background-color: #fff;
+    color: #1c4d36;
+    border-bottom-color: #1c4d36;
+    font-weight: bold;
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}

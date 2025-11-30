@@ -92,6 +92,50 @@ public class ImportController {
         }
     }
 
+    @PostMapping("/coordinates")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ResponseEntity<ImportResponseDTO> importCoordinates(
+            @Valid @RequestBody se.ifmo.ru.back.dto.ImportCoordinatesRequestDTO request,
+            @RequestParam(defaultValue = "user") String username) {
+        try {
+            ImportResponseDTO response = importService.importCoordinates(request, username);
+            
+            if ("SUCCESS".equals(response.status())) {
+                SpaceMarineWebSocket.broadcast("coordinates_imported:" + response.createdObjectsCount());
+                return ResponseEntity.status(HttpStatus.CREATED).body(response);
+            } else {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+        } catch (Exception e) {
+            ImportResponseDTO errorResponse = new ImportResponseDTO(
+                    null, "FAILED", 0, "Ошибка импорта", e.getMessage()
+            );
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        }
+    }
+
+    @PostMapping("/chapters")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ResponseEntity<ImportResponseDTO> importChapters(
+            @Valid @RequestBody se.ifmo.ru.back.dto.ImportChaptersRequestDTO request,
+            @RequestParam(defaultValue = "user") String username) {
+        try {
+            ImportResponseDTO response = importService.importChapters(request, username);
+            
+            if ("SUCCESS".equals(response.status())) {
+                SpaceMarineWebSocket.broadcast("chapters_imported:" + response.createdObjectsCount());
+                return ResponseEntity.status(HttpStatus.CREATED).body(response);
+            } else {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+            }
+        } catch (Exception e) {
+            ImportResponseDTO errorResponse = new ImportResponseDTO(
+                    null, "FAILED", 0, "Ошибка импорта", e.getMessage()
+            );
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        }
+    }
+
     @GetMapping("/history")
     public ResponseEntity<Page<ImportHistoryDTO>> getImportHistory(
             @RequestParam(defaultValue = "user") String username,

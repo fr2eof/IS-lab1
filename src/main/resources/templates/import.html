@@ -2,14 +2,14 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Импорт Space Marines</title>
+    <title>Импорт данных</title>
     <link rel="stylesheet" href="/style.css">
     <script defer src="/reusable.js"></script>
     <script defer src="/import.js"></script>
 </head>
 <body>
 <div class="container">
-    <h1>Импорт Space Marines</h1>
+    <h1>Импорт данных</h1>
     <div class="button-bar">
         <div class="button-subgroup">
             <button onclick="window.location.href='index.html'">Space Marines</button>
@@ -21,8 +21,9 @@
         </div>
     </div>
 
+    <!-- Импорт Space Marines -->
     <div class="import-section">
-        <h2>Загрузка JSON файла</h2>
+        <h2>Импорт Space Marines</h2>
         <div class="form-group">
             <label for="username">Имя пользователя:</label>
             <input type="text" id="username" value="user" placeholder="Введите имя пользователя">
@@ -32,17 +33,62 @@
             <input type="file" id="fileInput" accept=".json" />
         </div>
         <div class="form-group">
-            <button id="importBtn" onclick="importFile()">Импортировать</button>
-            <button onclick="downloadTemplate()">Скачать шаблон JSON</button>
+            <button id="importBtn" onclick="importFile('spacemarines')">Импортировать</button>
+            <button onclick="downloadTemplate('spacemarines')">Скачать шаблон JSON</button>
         </div>
         <div id="importStatus" class="status-message"></div>
     </div>
 
     <div class="import-section">
-        <h2>Пример формата JSON</h2>
+        <h2>Пример формата JSON для Space Marines</h2>
         <pre id="jsonExample" class="json-example"></pre>
+    </div>
+
+    <!-- Импорт Coordinates -->
+    <div class="import-section">
+        <h2>Импорт Coordinates</h2>
+        <div class="form-group">
+            <label for="usernameCoords">Имя пользователя:</label>
+            <input type="text" id="usernameCoords" value="user" placeholder="Введите имя пользователя">
+        </div>
+        <div class="form-group">
+            <label for="fileInputCoords">Выберите JSON файл:</label>
+            <input type="file" id="fileInputCoords" accept=".json" />
+        </div>
+        <div class="form-group">
+            <button id="importBtnCoords" onclick="importFile('coordinates')">Импортировать</button>
+            <button onclick="downloadTemplate('coordinates')">Скачать шаблон JSON</button>
+        </div>
+        <div id="importStatusCoords" class="status-message"></div>
+    </div>
+
+    <div class="import-section">
+        <h2>Пример формата JSON для Coordinates</h2>
+        <pre id="jsonExampleCoords" class="json-example"></pre>
+    </div>
+
+    <!-- Импорт Chapters -->
+    <div class="import-section">
+        <h2>Импорт Chapters</h2>
+        <div class="form-group">
+            <label for="usernameChapters">Имя пользователя:</label>
+            <input type="text" id="usernameChapters" value="user" placeholder="Введите имя пользователя">
+        </div>
+        <div class="form-group">
+            <label for="fileInputChapters">Выберите JSON файл:</label>
+            <input type="file" id="fileInputChapters" accept=".json" />
+        </div>
+        <div class="form-group">
+            <button id="importBtnChapters" onclick="importFile('chapters')">Импортировать</button>
+            <button onclick="downloadTemplate('chapters')">Скачать шаблон JSON</button>
+        </div>
+        <div id="importStatusChapters" class="status-message"></div>
+    </div>
+
+    <div class="import-section">
+        <h2>Пример формата JSON для Chapters</h2>
+        <pre id="jsonExampleChapters" class="json-example"></pre>
     </div>
 </div>
 </body>
 </html>
-

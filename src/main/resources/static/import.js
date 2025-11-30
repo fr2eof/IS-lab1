@@ -1,52 +1,127 @@
 const API_IMPORT = "/api/import";
 
-// Пример JSON для отображения
-const exampleJson = {
-    "spaceMarines": [
-        {
-            "name": "Marine 1",
-            "coordinates": {
+// Примеры JSON для отображения
+const examples = {
+    spacemarines: {
+        "spaceMarines": [
+            {
+                "name": "Marine 1",
+                "coordinates": {
+                    "x": 10.5,
+                    "y": 20.3
+                },
+                "chapter": {
+                    "name": "Ultramarines",
+                    "marinesCount": 1
+                },
+                "health": 100,
+                "heartCount": 2,
+                "category": "ASSAULT",
+                "weaponType": "BOLT_PISTOL"
+            },
+            {
+                "name": "Marine 2",
+                "coordinatesId": 1,
+                "chapterId": 2,
+                "health": 150,
+                "heartCount": 3,
+                "category": "TERMINATOR",
+                "weaponType": "MULTI_MELTA"
+            },
+            {
+                "name": "Marine 3",
+                "coordinates": {
+                    "x": 15.0,
+                    "y": null
+                },
+                "chapterId": 1,
+                "health": 120,
+                "heartCount": 2,
+                "category": "SUPPRESSOR",
+                "weaponType": "FLAMER"
+            }
+        ]
+    },
+    coordinates: {
+        "coordinates": [
+            {
                 "x": 10.5,
                 "y": 20.3
             },
-            "chapter": {
-                "name": "Ultramarines",
-                "marinesCount": 1
-            },
-            "health": 100,
-            "heartCount": 2,
-            "category": "ASSAULT",
-            "weaponType": "BOLT_PISTOL"
-        },
-        {
-            "name": "Marine 2",
-            "coordinates": {
+            {
                 "x": 15.0,
                 "y": null
             },
-            "health": 150,
-            "heartCount": 3,
-            "category": "TERMINATOR",
-            "weaponType": "MULTI_MELTA"
-        }
-    ]
+            {
+                "x": 20.7,
+                "y": 30.1
+            }
+        ]
+    },
+    chapters: {
+        "chapters": [
+            {
+                "name": "Ultramarines",
+                "marinesCount": 1
+            },
+            {
+                "name": "Blood Angels",
+                "marinesCount": 5
+            },
+            {
+                "name": "Dark Angels",
+                "marinesCount": 10
+            }
+        ]
+    }
 };
 
-// Отображаем пример JSON
+// Отображаем примеры JSON при загрузке страницы
 document.addEventListener('DOMContentLoaded', function() {
-    const jsonExample = document.getElementById('jsonExample');
-    if (jsonExample) {
-        jsonExample.textContent = JSON.stringify(exampleJson, null, 2);
+    // Отображаем пример для Space Marines
+    const spaceMarinesExample = document.getElementById('jsonExample');
+    if (spaceMarinesExample && examples.spacemarines) {
+        spaceMarinesExample.textContent = JSON.stringify(examples.spacemarines, null, 2);
+    }
+    
+    // Отображаем пример для Coordinates
+    const coordsExample = document.getElementById('jsonExampleCoords');
+    if (coordsExample && examples.coordinates) {
+        coordsExample.textContent = JSON.stringify(examples.coordinates, null, 2);
+    }
+    
+    // Отображаем пример для Chapters
+    const chaptersExample = document.getElementById('jsonExampleChapters');
+    if (chaptersExample && examples.chapters) {
+        chaptersExample.textContent = JSON.stringify(examples.chapters, null, 2);
     }
 });
 
-function importFile() {
-    const fileInput = document.getElementById('fileInput');
-    const username = document.getElementById('username').value || 'user';
-    const importBtn = document.getElementById('importBtn');
+function importFile(type) {
+    let fileInput, username, importBtn, statusId;
+    
+    if (type === 'spacemarines') {
+        fileInput = document.getElementById('fileInput');
+        username = document.getElementById('username').value || 'user';
+        importBtn = document.getElementById('importBtn');
+        statusId = 'importStatus';
+    } else if (type === 'coordinates') {
+        fileInput = document.getElementById('fileInputCoords');
+        username = document.getElementById('usernameCoords').value || 'user';
+        importBtn = document.getElementById('importBtnCoords');
+        statusId = 'importStatusCoords';
+    } else if (type === 'chapters') {
+        fileInput = document.getElementById('fileInputChapters');
+        username = document.getElementById('usernameChapters').value || 'user';
+        importBtn = document.getElementById('importBtnChapters');
+        statusId = 'importStatusChapters';
+    } else {
+        showStatus('Неизвестный тип импорта', 'error', statusId);
+        return;
+    }
 
     if (!fileInput.files || fileInput.files.length === 0) {
-        showStatus('Пожалуйста, выберите файл', 'error');
+        showStatus('Пожалуйста, выберите файл', 'error', statusId);
         return;
     }
 
@@ -54,76 +129,121 @@ function importFile() {
     const reader = new FileReader();
 
     reader.onload = function(e) {
-        // Отправляем содержимое файла на сервер
         importBtn.disabled = true;
-        showStatus('Импорт в процессе...', 'info');
+        showStatus('Импорт в процессе...', 'info', statusId);
 
-        fetch(`${API_IMPORT}/file?username=${encodeURIComponent(username)}`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'text/plain'
-            },
-            body: e.target.result
-        })
-        .then(async response => {
-            // Проверяем Content-Type перед парсингом JSON
-            const contentType = response.headers.get('content-type');
-            if (!contentType || !contentType.includes('application/json')) {
-                // Если ответ не JSON, читаем как текст
-                const text = await response.text();
-                let errorMessage = 'Ошибка импорта';
-                if (text) {
-                    if (text.includes('could not') || text.includes('Connection') || text.includes('database')) {
-                        errorMessage = 'Ошибка подключения к базе данных. Проверьте, что база данных запущена.';
-                    } else if (text.length < 200) {
-                        errorMessage = 'Ошибка сервера: ' + text;
-                    } else {
-                        errorMessage = 'Ошибка сервера. Попробуйте позже.';
+        let endpoint = '';
+        if (type === 'spacemarines') {
+            endpoint = '/file';
+        } else if (type === 'coordinates') {
+            endpoint = '/coordinates';
+        } else if (type === 'chapters') {
+            endpoint = '/chapters';
+        }
+
+        // Для spacemarines используем старый метод /file, для остальных - JSON
+        if (type === 'spacemarines') {
+            fetch(`${API_IMPORT}${endpoint}?username=${encodeURIComponent(username)}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'text/plain'
+                },
+                body: e.target.result
+            })
+            .then(async response => {
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const text = await response.text();
+                    let errorMessage = 'Ошибка импорта';
+                    if (text) {
+                        if (text.includes('could not') || text.includes('Connection') || text.includes('database')) {
+                            errorMessage = 'Ошибка подключения к базе данных. Проверьте, что база данных запущена.';
+                        } else if (text.length < 200) {
+                            errorMessage = 'Ошибка сервера: ' + text;
+                        } else {
+                            errorMessage = 'Ошибка сервера. Попробуйте позже.';
+                        }
                     }
+                    throw new Error(errorMessage);
                 }
-                throw new Error(errorMessage);
-            }
-            
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data.errorMessage || data.message || 'Ошибка импорта');
-            }
-            return data;
-        })
-        .then(data => {
-            if (data.status === 'SUCCESS') {
-                showStatus(`Успешно импортировано ${data.createdObjectsCount} объектов. ID операции: ${data.importHistoryId}`, 'success');
-                fileInput.value = ''; // Очищаем выбор файла
+                return response.json();
+            })
+            .then(data => {
+                if (!data.status || data.status !== 'SUCCESS') {
+                    throw new Error(data.errorMessage || data.message || 'Ошибка импорта');
+                }
+                const typeName = type === 'spacemarines' ? 'десантников' : 
+                               type === 'coordinates' ? 'координат' : 'глав';
+                showStatus(`Успешно импортировано ${data.createdObjectsCount} ${typeName}. ID операции: ${data.importHistoryId}`, 'success', statusId);
+                fileInput.value = '';
                 
-                // Обновляем страницу Space Marines через WebSocket (если открыта)
                 if (window.ws && window.ws.readyState === WebSocket.OPEN) {
                     window.ws.send('refresh');
                 }
-            } else {
-                // Ошибка уже сохранена в историю на сервере
-                showStatus(data.errorMessage || data.message || 'Ошибка импорта', 'error');
+            })
+            .catch(error => {
+                console.error('Import error:', error);
+                const message = error.message || 'Ошибка при импорте файла';
+                showStatus(message, 'error', statusId);
+            })
+            .finally(() => {
+                importBtn.disabled = false;
+            });
+        } else {
+            // Для coordinates и chapters парсим JSON и отправляем
+            try {
+                const jsonContent = JSON.parse(e.target.result);
+                fetch(`${API_IMPORT}${endpoint}?username=${encodeURIComponent(username)}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(jsonContent)
+                })
+                .then(async response => {
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({ errorMessage: 'Ошибка импорта' }));
+                        throw new Error(errorData.errorMessage || errorData.message || 'Ошибка импорта');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    const typeName = type === 'coordinates' ? 'координат' : 'глав';
+                    showStatus(`Успешно импортировано ${data.createdObjectsCount} ${typeName}. ID операции: ${data.importHistoryId}`, 'success', statusId);
+                    fileInput.value = '';
+                    
+                    if (window.ws && window.ws.readyState === WebSocket.OPEN) {
+                        window.ws.send('refresh');
+                    }
+                })
+                .catch(error => {
+                    console.error('Import error:', error);
+                    const message = error.message || 'Ошибка при импорте файла';
+                    showStatus(message, 'error', statusId);
+                })
+                .finally(() => {
+                    importBtn.disabled = false;
+                });
+            } catch (parseError) {
+                showStatus('Ошибка парсинга JSON: ' + parseError.message, 'error', statusId);
+                importBtn.disabled = false;
             }
-        })
-        .catch(error => {
-            console.error('Import error:', error);
-            const message = error.message || 'Ошибка при импорте файла';
-            showStatus(message, 'error');
-        })
-        .finally(() => {
-            importBtn.disabled = false;
-        });
+        }
     };
 
     reader.onerror = function() {
-        showStatus('Ошибка чтения файла', 'error');
+        showStatus('Ошибка чтения файла', 'error', statusId);
         importBtn.disabled = false;
     };
 
     reader.readAsText(file);
 }
 
-function showStatus(message, type) {
-    const statusDiv = document.getElementById('importStatus');
+
+function showStatus(message, type, statusId = 'importStatus') {
+    const statusDiv = document.getElementById(statusId);
+    if (!statusDiv) return;
+    
     statusDiv.textContent = message;
     statusDiv.className = 'status-message';
     
@@ -151,35 +271,90 @@ function showStatus(message, type) {
     statusDiv.style.display = 'block';
 }
 
-function downloadTemplate() {
-    const template = {
-        "spaceMarines": [
-            {
-                "name": "Пример десантника",
-                "coordinates": {
+function downloadTemplate(type) {
+    let template, filename;
+    
+    if (type === 'spacemarines') {
+        template = {
+            "spaceMarines": [
+                {
+                    "name": "Пример десантника (создание новых координат и главы)",
+                    "coordinates": {
+                        "x": 10.5,
+                        "y": 20.3
+                    },
+                    "chapter": {
+                        "name": "Название ордена",
+                        "marinesCount": 1
+                    },
+                    "health": 100,
+                    "heartCount": 2,
+                    "category": "ASSAULT",
+                    "weaponType": "BOLT_PISTOL"
+                },
+                {
+                    "name": "Пример десантника (использование существующих по ID)",
+                    "coordinatesId": 1,
+                    "chapterId": 1,
+                    "health": 150,
+                    "heartCount": 3,
+                    "category": "TERMINATOR",
+                    "weaponType": "MULTI_MELTA"
+                },
+                {
+                    "name": "Пример десантника (смешанный вариант)",
+                    "coordinates": {
+                        "x": 20.0,
+                        "y": 30.5
+                    },
+                    "chapterId": 1,
+                    "health": 120,
+                    "heartCount": 2,
+                    "category": "SUPPRESSOR",
+                    "weaponType": "FLAMER"
+                }
+            ]
+        };
+        filename = 'import_spacemarines_template.json';
+    } else if (type === 'coordinates') {
+        template = {
+            "coordinates": [
+                {
                     "x": 10.5,
                     "y": 20.3
                 },
-                "chapter": {
+                {
+                    "x": 15.0,
+                    "y": null
+                }
+            ]
+        };
+        filename = 'import_coordinates_template.json';
+    } else if (type === 'chapters') {
+        template = {
+            "chapters": [
+                {
                     "name": "Название ордена",
                     "marinesCount": 1
                 },
-                "health": 100,
-                "heartCount": 2,
-                "category": "ASSAULT",
-                "weaponType": "BOLT_PISTOL"
-            }
-        ]
-    };
+                {
+                    "name": "Другой орден",
+                    "marinesCount": 5
+                }
+            ]
+        };
+        filename = 'import_chapters_template.json';
+    } else {
+        return;
+    }
 
     const blob = new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'import_template.json';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 }
-
