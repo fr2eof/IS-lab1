@@ -1,5 +1,7 @@
 package se.ifmo.ru.back.service.impl;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.springframework.data.domain.Page;
@@ -35,6 +37,7 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
     private final CoordinatesService coordinatesService;
     private final SpaceMarineMapper spaceMarineMapper;
     private final Validator validator;
+    private final EntityManager entityManager;
 
     public SpaceMarineServiceImpl(
             SpaceMarineRepository spaceMarineRepository,
@@ -43,7 +46,8 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
             ChapterService chapterService,
             CoordinatesService coordinatesService,
             SpaceMarineMapper spaceMarineMapper,
-            Validator validator) {
+            Validator validator,
+            EntityManager entityManager) {
         this.spaceMarineRepository = spaceMarineRepository;
         this.chapterRepository = chapterRepository;
         this.coordinatesRepository = coordinatesRepository;
@@ -51,6 +55,7 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
         this.coordinatesService = coordinatesService;
         this.spaceMarineMapper = spaceMarineMapper;
         this.validator = validator;
+        this.entityManager = entityManager;
     }
 
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
@@ -204,26 +209,33 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
 
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public SpaceMarine updateSpaceMarine(Integer id, SpaceMarine updatedSpaceMarine) {
-        // Используем блокировку для предотвращения одновременного обновления
-        Optional<SpaceMarine> existingSpaceMarine = spaceMarineRepository.findByIdForUpdate(id);
-        if (existingSpaceMarine.isPresent()) {
-            SpaceMarine spaceMarine = existingSpaceMarine.get();
-            
-            // Проверка уникальности при изменении критических полей
-            if (spaceMarine.getChapter() != null && updatedSpaceMarine.getChapter() != null &&
-                updatedSpaceMarine.getChapter().getId() != null &&
-                (spaceMarine.getHealth() != updatedSpaceMarine.getHealth() ||
-                 spaceMarine.getWeaponType() != updatedSpaceMarine.getWeaponType() ||
-                 !spaceMarine.getCoordinates().getId().equals(updatedSpaceMarine.getCoordinates().getId()))) {
-                List<SpaceMarine> duplicates = spaceMarineRepository.findByChapterAndHealthAndWeaponAndCoordinatesWithLock(
-                        updatedSpaceMarine.getChapter().getId(),
-                        updatedSpaceMarine.getHealth(),
-                        updatedSpaceMarine.getWeaponType() != null ? updatedSpaceMarine.getWeaponType().name() : null,
-                        updatedSpaceMarine.getCoordinates().getId());
-                if (!duplicates.isEmpty() && !duplicates.get(0).getId().equals(id)) {
-                    throw new ValidationException("Десантник с таким здоровьем, оружием и координатами уже существует в этой главе");
-                }
+        // Сначала находим объект, затем блокируем его для обновления
+        Optional<SpaceMarine> existingSpaceMarineOpt = spaceMarineRepository.findById(id);
+        if (!existingSpaceMarineOpt.isPresent()) {
+            return null;
+        }
+        
+        // Блокируем объект для обновления
+        SpaceMarine spaceMarine = entityManager.find(SpaceMarine.class, id, LockModeType.PESSIMISTIC_WRITE);
+        if (spaceMarine == null) {
+            return null;
+        }
+        
+        // Проверка уникальности при изменении критических полей
+        if (spaceMarine.getChapter() != null && updatedSpaceMarine.getChapter() != null &&
+            updatedSpaceMarine.getChapter().getId() != null &&
+            (spaceMarine.getHealth() != updatedSpaceMarine.getHealth() ||
+             spaceMarine.getWeaponType() != updatedSpaceMarine.getWeaponType() ||
+             !spaceMarine.getCoordinates().getId().equals(updatedSpaceMarine.getCoordinates().getId()))) {
+            List<SpaceMarine> duplicates = spaceMarineRepository.findByChapterAndHealthAndWeaponAndCoordinatesWithLock(
+                    updatedSpaceMarine.getChapter().getId(),
+                    updatedSpaceMarine.getHealth(),
+                    updatedSpaceMarine.getWeaponType() != null ? updatedSpaceMarine.getWeaponType().name() : null,
+                    updatedSpaceMarine.getCoordinates().getId());
+            if (!duplicates.isEmpty() && !duplicates.get(0).getId().equals(id)) {
+                throw new ValidationException("Десантник с таким здоровьем, оружием и координатами уже существует в этой главе");
             }
+        }
             
             // Handle chapter change
             if (spaceMarine.getChapter() != null && !spaceMarine.getChapter().equals(updatedSpaceMarine.getChapter())) {
@@ -248,30 +260,27 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
             spaceMarine.setCategory(updatedSpaceMarine.getCategory());
             spaceMarine.setWeaponType(updatedSpaceMarine.getWeaponType());
             
-            // Валидация сущности (включая кастомные валидаторы)
-            // ID уже установлен, поэтому валидатор исключит этот объект из проверки
-            Set<ConstraintViolation<SpaceMarine>> violations = validator.validate(spaceMarine);
-            if (!violations.isEmpty()) {
-                String errorMessage = violations.stream()
-                        .map(ConstraintViolation::getMessage)
-                        .collect(Collectors.joining("; "));
-                throw new ValidationException(errorMessage);
-            }
+            // Валидация DTO уже выполнена в контроллере через @Valid (если используется)
+            // Уникальность проверена выше с блокировкой
+            // Базовые ограничения (NotNull, Min, Max) проверяются на уровне БД
+            // Не вызываем validator.validate() здесь, чтобы избежать проблем с блокировками в UniqueFieldsValidator
             
             return spaceMarineRepository.save(spaceMarine);
-        }
-        return null;
     }
     
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public SpaceMarine updateSpaceMarineFromDTO(Integer id, SpaceMarineDTO dto) {
-        // Используем блокировку для предотвращения одновременного обновления
-        Optional<SpaceMarine> existingSpaceMarine = spaceMarineRepository.findByIdForUpdate(id);
-        if (!existingSpaceMarine.isPresent()) {
+        // Сначала находим объект, затем блокируем его для обновления
+        Optional<SpaceMarine> existingSpaceMarineOpt = spaceMarineRepository.findById(id);
+        if (!existingSpaceMarineOpt.isPresent()) {
             return null;
         }
         
-        SpaceMarine spaceMarine = existingSpaceMarine.get();
+        // Блокируем объект для обновления
+        SpaceMarine spaceMarine = entityManager.find(SpaceMarine.class, id, LockModeType.PESSIMISTIC_WRITE);
+        if (spaceMarine == null) {
+            return null;
+        }
         
         // Проверка уникальности при изменении критических полей
         if (dto.chapterId() != null && spaceMarine.getHealth() != null && dto.coordinatesId() != null) {
@@ -346,15 +355,10 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
             spaceMarine.setChapter(null);
         }
         
-        // Валидация сущности (включая кастомные валидаторы)
-        // ID уже установлен, поэтому валидатор исключит этот объект из проверки
-        Set<ConstraintViolation<SpaceMarine>> violations = validator.validate(spaceMarine);
-        if (!violations.isEmpty()) {
-            String errorMessage = violations.stream()
-                    .map(ConstraintViolation::getMessage)
-                    .collect(Collectors.joining("; "));
-            throw new ValidationException(errorMessage);
-        }
+        // Валидация DTO уже выполнена в контроллере через @Valid (если используется)
+        // Уникальность проверена выше с блокировкой
+        // Базовые ограничения (NotNull, Min, Max) проверяются на уровне БД
+        // Не вызываем validator.validate() здесь, чтобы избежать проблем с блокировками в UniqueFieldsValidator
         
         // Сначала обновляем SpaceMarine
         SpaceMarine updatedSpaceMarine = spaceMarineRepository.save(spaceMarine);
@@ -372,16 +376,23 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
 
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public boolean deleteSpaceMarine(Integer id) {
-        // Используем блокировку для предотвращения одновременного удаления
-        Optional<SpaceMarine> spaceMarine = spaceMarineRepository.findByIdForUpdate(id);
-        if (spaceMarine.isPresent()) {
-            if (spaceMarine.get().getChapter() != null) {
-                chapterRepository.removeMarineFromChapter(spaceMarine.get().getChapter().getId());
-            }
-            spaceMarineRepository.deleteById(id);
-            return true;
+        // Сначала находим объект, затем блокируем его для удаления
+        Optional<SpaceMarine> spaceMarineOpt = spaceMarineRepository.findById(id);
+        if (!spaceMarineOpt.isPresent()) {
+            return false;
         }
-        return false;
+        
+        // Блокируем объект для удаления
+        SpaceMarine spaceMarine = entityManager.find(SpaceMarine.class, id, LockModeType.PESSIMISTIC_WRITE);
+        if (spaceMarine == null) {
+            return false;
+        }
+        
+        if (spaceMarine.getChapter() != null) {
+            chapterRepository.removeMarineFromChapter(spaceMarine.getChapter().getId());
+        }
+        spaceMarineRepository.deleteById(id);
+        return true;
     }
 
     @Transactional

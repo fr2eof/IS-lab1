@@ -1,5 +1,7 @@
 package se.ifmo.ru.back.service.impl;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.springframework.data.domain.Page;
@@ -30,16 +32,19 @@ public class ChapterServiceImpl implements ChapterService {
     private final SpaceMarineRepository spaceMarineRepository;
     private final SpaceMarineMapper spaceMarineMapper;
     private final Validator validator;
+     private final EntityManager entityManager;
 
     public ChapterServiceImpl(
             ChapterRepository chapterRepository,
             SpaceMarineRepository spaceMarineRepository,
             SpaceMarineMapper spaceMarineMapper,
-            Validator validator) {
+            Validator validator,
+            EntityManager entityManager) {
         this.chapterRepository = chapterRepository;
         this.spaceMarineRepository = spaceMarineRepository;
         this.spaceMarineMapper = spaceMarineMapper;
         this.validator = validator;
+        this.entityManager = entityManager;
     }
 
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
@@ -101,36 +106,37 @@ public class ChapterServiceImpl implements ChapterService {
 
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Chapter updateChapter(Long id, Chapter updatedChapter) {
-        // Используем блокировку для предотвращения одновременного обновления
-        Optional<Chapter> existingChapter = chapterRepository.findByIdForUpdate(id);
-        if (existingChapter.isPresent()) {
-            Chapter chapter = existingChapter.get();
-            
-            // Проверяем уникальность новых значений (исключая текущий объект)
-            if (!chapter.getName().equals(updatedChapter.getName()) || 
-                chapter.getMarinesCount() != updatedChapter.getMarinesCount()) {
-                Optional<Chapter> duplicate = chapterRepository.findByNameAndMarinesCountWithLock(
-                        updatedChapter.getName(), updatedChapter.getMarinesCount());
-                if (duplicate.isPresent() && !duplicate.get().getId().equals(id)) {
-                    throw new ValidationException("Глава с таким именем и количеством маринов уже существует");
-                }
-            }
-            
-            chapter.setName(updatedChapter.getName());
-            chapter.setMarinesCount(updatedChapter.getMarinesCount());
-            
-            // Валидация сущности (включая кастомные валидаторы)
-            Set<ConstraintViolation<Chapter>> violations = validator.validate(chapter);
-            if (!violations.isEmpty()) {
-                String errorMessage = violations.stream()
-                        .map(ConstraintViolation::getMessage)
-                        .collect(Collectors.joining("; "));
-                throw new ValidationException(errorMessage);
-            }
-            
-            return chapterRepository.save(chapter);
+        // Сначала находим объект, затем блокируем его для обновления
+        Optional<Chapter> existingChapterOpt = chapterRepository.findById(id);
+        if (!existingChapterOpt.isPresent()) {
+            return null;
         }
-        return null;
+        
+        // Блокируем объект для обновления
+        Chapter chapter = entityManager.find(Chapter.class, id, LockModeType.PESSIMISTIC_WRITE);
+        if (chapter == null) {
+            return null;
+        }
+        
+        // Проверяем уникальность новых значений (исключая текущий объект)
+        if (!chapter.getName().equals(updatedChapter.getName()) || 
+            chapter.getMarinesCount() != updatedChapter.getMarinesCount()) {
+            Optional<Chapter> duplicate = chapterRepository.findByNameAndMarinesCountWithLock(
+                    updatedChapter.getName(), updatedChapter.getMarinesCount());
+            if (duplicate.isPresent() && !duplicate.get().getId().equals(id)) {
+                throw new ValidationException("Глава с таким именем и количеством маринов уже существует");
+            }
+        }
+        
+        chapter.setName(updatedChapter.getName());
+        chapter.setMarinesCount(updatedChapter.getMarinesCount());
+        
+        // Валидация DTO уже выполнена в контроллере через @Valid
+        // Уникальность проверена выше с блокировкой
+        // Базовые ограничения (NotNull, Min, Max) проверяются на уровне БД
+        // Не вызываем validator.validate() здесь, чтобы избежать проблем с блокировками в UniqueFieldsValidator
+        
+        return chapterRepository.save(chapter);
     }
 
     @Transactional

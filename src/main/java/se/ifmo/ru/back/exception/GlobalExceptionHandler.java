@@ -215,6 +215,33 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
     }
 
+    @ExceptionHandler(org.springframework.dao.OptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleOptimisticLockingFailureException(
+            org.springframework.dao.OptimisticLockingFailureException ex, 
+            HttpServletRequest request) {
+        ErrorResponse errorResponse = new ErrorResponse(
+            "Объект был изменен другим пользователем. Пожалуйста, обновите страницу и попробуйте снова.",
+            "OPTIMISTIC_LOCK_ERROR",
+            request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(errorResponse);
+    }
+
+    @ExceptionHandler(org.springframework.transaction.UnexpectedRollbackException.class)
+    public ResponseEntity<ErrorResponse> handleUnexpectedRollbackException(
+            org.springframework.transaction.UnexpectedRollbackException ex, 
+            HttpServletRequest request) {
+        logger.error("Transaction rollback error", ex);
+        // Извлекаем причину из вложенного исключения
+        String message = ex.getCause() != null ? ex.getCause().getMessage() : ex.getMessage();
+        ErrorResponse errorResponse = new ErrorResponse(
+            "Ошибка при сохранении данных: " + message,
+            "TRANSACTION_ERROR",
+            request.getRequestURI()
+        );
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleGenericException(
             Exception ex, 

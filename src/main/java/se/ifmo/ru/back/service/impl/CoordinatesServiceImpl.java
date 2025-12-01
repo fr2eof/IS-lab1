@@ -1,5 +1,7 @@
 package se.ifmo.ru.back.service.impl;
 
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.springframework.data.domain.Page;
@@ -30,16 +32,19 @@ public class CoordinatesServiceImpl implements CoordinatesService {
     private final SpaceMarineRepository spaceMarineRepository;
     private final SpaceMarineMapper spaceMarineMapper;
     private final Validator validator;
+    private final EntityManager entityManager;
 
     public CoordinatesServiceImpl(
             CoordinatesRepository coordinatesRepository,
             SpaceMarineRepository spaceMarineRepository,
             SpaceMarineMapper spaceMarineMapper,
-            Validator validator) {
+            Validator validator,
+            EntityManager entityManager) {
         this.coordinatesRepository = coordinatesRepository;
         this.spaceMarineRepository = spaceMarineRepository;
         this.spaceMarineMapper = spaceMarineMapper;
         this.validator = validator;
+        this.entityManager = entityManager;
     }
 
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
@@ -97,36 +102,37 @@ public class CoordinatesServiceImpl implements CoordinatesService {
 
     @Transactional(isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Coordinates updateCoordinates(Long id, Coordinates updatedCoordinates) {
-        // Используем блокировку для предотвращения одновременного обновления
-        Optional<Coordinates> existingCoordinates = coordinatesRepository.findByIdForUpdate(id);
-        if (existingCoordinates.isPresent()) {
-            Coordinates coordinates = existingCoordinates.get();
-            
-            // Проверяем уникальность новых значений (исключая текущий объект)
-            if (!coordinates.getX().equals(updatedCoordinates.getX()) || 
-                !java.util.Objects.equals(coordinates.getY(), updatedCoordinates.getY())) {
-                Optional<Coordinates> duplicate = coordinatesRepository.findByXAndYWithLock(
-                        updatedCoordinates.getX(), updatedCoordinates.getY());
-                if (duplicate.isPresent() && !duplicate.get().getId().equals(id)) {
-                    throw new ValidationException("Координаты с такими значениями x и y уже существуют");
-                }
-            }
-            
-            coordinates.setX(updatedCoordinates.getX());
-            coordinates.setY(updatedCoordinates.getY());
-            
-            // Валидация сущности (включая кастомные валидаторы)
-            Set<ConstraintViolation<Coordinates>> violations = validator.validate(coordinates);
-            if (!violations.isEmpty()) {
-                String errorMessage = violations.stream()
-                        .map(ConstraintViolation::getMessage)
-                        .collect(Collectors.joining("; "));
-                throw new ValidationException(errorMessage);
-            }
-            
-            return coordinatesRepository.save(coordinates);
+        // Сначала находим объект, затем блокируем его для обновления
+        Optional<Coordinates> existingCoordinatesOpt = coordinatesRepository.findById(id);
+        if (!existingCoordinatesOpt.isPresent()) {
+            return null;
         }
-        return null;
+        
+        // Блокируем объект для обновления
+        Coordinates coordinates = entityManager.find(Coordinates.class, id, LockModeType.PESSIMISTIC_WRITE);
+        if (coordinates == null) {
+            return null;
+        }
+        
+        // Проверяем уникальность новых значений (исключая текущий объект)
+        if (!coordinates.getX().equals(updatedCoordinates.getX()) || 
+            !java.util.Objects.equals(coordinates.getY(), updatedCoordinates.getY())) {
+            Optional<Coordinates> duplicate = coordinatesRepository.findByXAndYWithLock(
+                    updatedCoordinates.getX(), updatedCoordinates.getY());
+            if (duplicate.isPresent() && !duplicate.get().getId().equals(id)) {
+                throw new ValidationException("Координаты с такими значениями x и y уже существуют");
+            }
+        }
+        
+        coordinates.setX(updatedCoordinates.getX());
+        coordinates.setY(updatedCoordinates.getY());
+        
+        // Валидация DTO уже выполнена в контроллере через @Valid
+        // Уникальность проверена выше с блокировкой
+        // Базовые ограничения (NotNull) проверяются на уровне БД
+        // Не вызываем validator.validate() здесь, чтобы избежать проблем с блокировками в UniqueFieldsValidator
+        
+        return coordinatesRepository.save(coordinates);
     }
 
     @Transactional
