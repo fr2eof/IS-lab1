@@ -35,4 +35,8 @@ public class Chapter {
     @Max(value = 1000, message = "Marines count cannot exceed 1000")
     @Column(name = "marines_count", nullable = false)
     private int marinesCount;
+
+    @Version
+    @Column(name = "version")
+    private Long version;
 }

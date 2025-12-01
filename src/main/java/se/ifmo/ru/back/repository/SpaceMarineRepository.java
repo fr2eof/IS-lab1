@@ -1,8 +1,10 @@
 package se.ifmo.ru.back.repository;
 
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -11,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 import se.ifmo.ru.back.entity.SpaceMarine;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface SpaceMarineRepository extends JpaRepository<SpaceMarine, Integer> {
@@ -75,6 +78,21 @@ public interface SpaceMarineRepository extends JpaRepository<SpaceMarine, Intege
     // Подсчет с фильтром по имени
     @Query("SELECT COUNT(sm) FROM SpaceMarine sm WHERE LOWER(sm.name) = LOWER(:nameFilter)")
     long countWithNameFilter(@Param("nameFilter") String nameFilter);
+    
+    // Проверка уникальности с блокировкой для предотвращения race conditions
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT sm FROM SpaceMarine sm WHERE sm.chapter.id = :chapterId AND sm.health = :health " +
+           "AND sm.weaponType = :weaponType AND sm.coordinates.id = :coordinatesId")
+    List<SpaceMarine> findByChapterAndHealthAndWeaponAndCoordinatesWithLock(
+            @Param("chapterId") Long chapterId,
+            @Param("health") Integer health,
+            @Param("weaponType") String weaponType,
+            @Param("coordinatesId") Long coordinatesId);
+    
+    // Поиск с блокировкой для обновления
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT sm FROM SpaceMarine sm WHERE sm.id = :id")
+    Optional<SpaceMarine> findByIdForUpdate(@Param("id") Integer id);
     
     // Метод для обновления (используется через save из JpaRepository)
     // update не нужен, так как save() автоматически делает merge для существующих сущностей

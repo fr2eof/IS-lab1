@@ -53,8 +53,21 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
         this.validator = validator;
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
     public SpaceMarine createSpaceMarine(SpaceMarine spaceMarine) {
+        // Проверка уникальности с блокировкой для предотвращения race conditions
+        if (spaceMarine.getChapter() != null && spaceMarine.getChapter().getId() != null && 
+            spaceMarine.getHealth() != null && spaceMarine.getCoordinates() != null) {
+            List<SpaceMarine> duplicates = spaceMarineRepository.findByChapterAndHealthAndWeaponAndCoordinatesWithLock(
+                    spaceMarine.getChapter().getId(),
+                    spaceMarine.getHealth(),
+                    spaceMarine.getWeaponType() != null ? spaceMarine.getWeaponType().name() : null,
+                    spaceMarine.getCoordinates().getId());
+            if (!duplicates.isEmpty()) {
+                throw new ValidationException("Десантник с таким здоровьем, оружием и координатами уже существует в этой главе");
+            }
+        }
+        
         // Валидация сущности (включая кастомные валидаторы)
         Set<ConstraintViolation<SpaceMarine>> violations = validator.validate(spaceMarine);
         if (!violations.isEmpty()) {
@@ -189,11 +202,28 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
         return spaceMarineRepository.countWithNameFilter(nameFilter);
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public SpaceMarine updateSpaceMarine(Integer id, SpaceMarine updatedSpaceMarine) {
-        Optional<SpaceMarine> existingSpaceMarine = spaceMarineRepository.findById(id);
+        // Используем блокировку для предотвращения одновременного обновления
+        Optional<SpaceMarine> existingSpaceMarine = spaceMarineRepository.findByIdForUpdate(id);
         if (existingSpaceMarine.isPresent()) {
             SpaceMarine spaceMarine = existingSpaceMarine.get();
+            
+            // Проверка уникальности при изменении критических полей
+            if (spaceMarine.getChapter() != null && updatedSpaceMarine.getChapter() != null &&
+                updatedSpaceMarine.getChapter().getId() != null &&
+                (spaceMarine.getHealth() != updatedSpaceMarine.getHealth() ||
+                 spaceMarine.getWeaponType() != updatedSpaceMarine.getWeaponType() ||
+                 !spaceMarine.getCoordinates().getId().equals(updatedSpaceMarine.getCoordinates().getId()))) {
+                List<SpaceMarine> duplicates = spaceMarineRepository.findByChapterAndHealthAndWeaponAndCoordinatesWithLock(
+                        updatedSpaceMarine.getChapter().getId(),
+                        updatedSpaceMarine.getHealth(),
+                        updatedSpaceMarine.getWeaponType() != null ? updatedSpaceMarine.getWeaponType().name() : null,
+                        updatedSpaceMarine.getCoordinates().getId());
+                if (!duplicates.isEmpty() && !duplicates.get(0).getId().equals(id)) {
+                    throw new ValidationException("Десантник с таким здоровьем, оружием и координатами уже существует в этой главе");
+                }
+            }
             
             // Handle chapter change
             if (spaceMarine.getChapter() != null && !spaceMarine.getChapter().equals(updatedSpaceMarine.getChapter())) {
@@ -233,14 +263,36 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
         return null;
     }
     
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public SpaceMarine updateSpaceMarineFromDTO(Integer id, SpaceMarineDTO dto) {
-        Optional<SpaceMarine> existingSpaceMarine = spaceMarineRepository.findById(id);
+        // Используем блокировку для предотвращения одновременного обновления
+        Optional<SpaceMarine> existingSpaceMarine = spaceMarineRepository.findByIdForUpdate(id);
         if (!existingSpaceMarine.isPresent()) {
             return null;
         }
         
         SpaceMarine spaceMarine = existingSpaceMarine.get();
+        
+        // Проверка уникальности при изменении критических полей
+        if (dto.chapterId() != null && spaceMarine.getHealth() != null && dto.coordinatesId() != null) {
+            Long oldChapterId = spaceMarine.getChapter() != null ? spaceMarine.getChapter().getId() : null;
+            Long oldCoordinatesId = spaceMarine.getCoordinates() != null ? spaceMarine.getCoordinates().getId() : null;
+            
+            if (!dto.chapterId().equals(oldChapterId) || 
+                !spaceMarine.getHealth().equals(dto.health()) ||
+                !oldCoordinatesId.equals(dto.coordinatesId()) ||
+                (spaceMarine.getWeaponType() != null ? spaceMarine.getWeaponType().name() : null) != 
+                (dto.weaponType() != null ? dto.weaponType() : null)) {
+                List<SpaceMarine> duplicates = spaceMarineRepository.findByChapterAndHealthAndWeaponAndCoordinatesWithLock(
+                        dto.chapterId(),
+                        dto.health(),
+                        dto.weaponType(),
+                        dto.coordinatesId());
+                if (!duplicates.isEmpty() && !duplicates.get(0).getId().equals(id)) {
+                    throw new ValidationException("Десантник с таким здоровьем, оружием и координатами уже существует в этой главе");
+                }
+            }
+        }
         
         // Обновляем основные поля
         spaceMarine.setName(dto.name());
@@ -318,9 +370,10 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
         return updatedSpaceMarine;
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public boolean deleteSpaceMarine(Integer id) {
-        Optional<SpaceMarine> spaceMarine = spaceMarineRepository.findById(id);
+        // Используем блокировку для предотвращения одновременного удаления
+        Optional<SpaceMarine> spaceMarine = spaceMarineRepository.findByIdForUpdate(id);
         if (spaceMarine.isPresent()) {
             if (spaceMarine.get().getChapter() != null) {
                 chapterRepository.removeMarineFromChapter(spaceMarine.get().getChapter().getId());

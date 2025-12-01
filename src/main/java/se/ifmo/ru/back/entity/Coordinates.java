@@ -29,4 +29,8 @@ public class Coordinates {
 
     @Column(name = "y")
     private Double y;
+
+    @Version
+    @Column(name = "version")
+    private Long version;
 }

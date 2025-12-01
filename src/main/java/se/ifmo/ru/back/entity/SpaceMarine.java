@@ -62,6 +62,10 @@ public class SpaceMarine {
     @Column(name = "weapon_type")
     private Weapon weaponType;
 
+    @Version
+    @Column(name = "version")
+    private Long version;
+
     @PrePersist
     protected void onCreate() {
         if (creationDate == null) {

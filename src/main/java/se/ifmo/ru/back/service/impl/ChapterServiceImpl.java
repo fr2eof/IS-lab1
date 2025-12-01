@@ -42,8 +42,15 @@ public class ChapterServiceImpl implements ChapterService {
         this.validator = validator;
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
     public Chapter createChapter(Chapter chapter) {
+        // Проверка уникальности с блокировкой для предотвращения race conditions
+        Optional<Chapter> existing = chapterRepository.findByNameAndMarinesCountWithLock(
+                chapter.getName(), chapter.getMarinesCount());
+        if (existing.isPresent()) {
+            throw new ValidationException("Глава с таким именем и количеством маринов уже существует");
+        }
+        
         // Валидация сущности (включая кастомные валидаторы)
         Set<ConstraintViolation<Chapter>> violations = validator.validate(chapter);
         if (!violations.isEmpty()) {
@@ -92,16 +99,27 @@ public class ChapterServiceImpl implements ChapterService {
         return chapterRepository.findByName(name);
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Chapter updateChapter(Long id, Chapter updatedChapter) {
-        Optional<Chapter> existingChapter = chapterRepository.findById(id);
+        // Используем блокировку для предотвращения одновременного обновления
+        Optional<Chapter> existingChapter = chapterRepository.findByIdForUpdate(id);
         if (existingChapter.isPresent()) {
             Chapter chapter = existingChapter.get();
+            
+            // Проверяем уникальность новых значений (исключая текущий объект)
+            if (!chapter.getName().equals(updatedChapter.getName()) || 
+                chapter.getMarinesCount() != updatedChapter.getMarinesCount()) {
+                Optional<Chapter> duplicate = chapterRepository.findByNameAndMarinesCountWithLock(
+                        updatedChapter.getName(), updatedChapter.getMarinesCount());
+                if (duplicate.isPresent() && !duplicate.get().getId().equals(id)) {
+                    throw new ValidationException("Глава с таким именем и количеством маринов уже существует");
+                }
+            }
+            
             chapter.setName(updatedChapter.getName());
             chapter.setMarinesCount(updatedChapter.getMarinesCount());
             
             // Валидация сущности (включая кастомные валидаторы)
-            // ID уже установлен, поэтому валидатор исключит этот объект из проверки
             Set<ConstraintViolation<Chapter>> violations = validator.validate(chapter);
             if (!violations.isEmpty()) {
                 String errorMessage = violations.stream()

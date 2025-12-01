@@ -42,8 +42,15 @@ public class CoordinatesServiceImpl implements CoordinatesService {
         this.validator = validator;
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.SERIALIZABLE)
     public Coordinates createCoordinates(Coordinates coordinates) {
+        // Проверка уникальности с блокировкой для предотвращения race conditions
+        Optional<Coordinates> existing = coordinatesRepository.findByXAndYWithLock(
+                coordinates.getX(), coordinates.getY());
+        if (existing.isPresent()) {
+            throw new ValidationException("Координаты с такими значениями x и y уже существуют");
+        }
+        
         // Валидация сущности (включая кастомные валидаторы)
         Set<ConstraintViolation<Coordinates>> violations = validator.validate(coordinates);
         if (!violations.isEmpty()) {
@@ -88,16 +95,27 @@ public class CoordinatesServiceImpl implements CoordinatesService {
         return coordinatesRepository.count();
     }
 
-    @Transactional
+    @Transactional(isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Coordinates updateCoordinates(Long id, Coordinates updatedCoordinates) {
-        Optional<Coordinates> existingCoordinates = coordinatesRepository.findById(id);
+        // Используем блокировку для предотвращения одновременного обновления
+        Optional<Coordinates> existingCoordinates = coordinatesRepository.findByIdForUpdate(id);
         if (existingCoordinates.isPresent()) {
             Coordinates coordinates = existingCoordinates.get();
+            
+            // Проверяем уникальность новых значений (исключая текущий объект)
+            if (!coordinates.getX().equals(updatedCoordinates.getX()) || 
+                !java.util.Objects.equals(coordinates.getY(), updatedCoordinates.getY())) {
+                Optional<Coordinates> duplicate = coordinatesRepository.findByXAndYWithLock(
+                        updatedCoordinates.getX(), updatedCoordinates.getY());
+                if (duplicate.isPresent() && !duplicate.get().getId().equals(id)) {
+                    throw new ValidationException("Координаты с такими значениями x и y уже существуют");
+                }
+            }
+            
             coordinates.setX(updatedCoordinates.getX());
             coordinates.setY(updatedCoordinates.getY());
             
             // Валидация сущности (включая кастомные валидаторы)
-            // ID уже установлен, поэтому валидатор исключит этот объект из проверки
             Set<ConstraintViolation<Coordinates>> violations = validator.validate(coordinates);
             if (!violations.isEmpty()) {
                 String errorMessage = violations.stream()
