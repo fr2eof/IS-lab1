@@ -30,6 +30,8 @@ import java.util.stream.Collectors;
 @Service
 public class ImportServiceImpl implements ImportService {
 
+    private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(ImportServiceImpl.class);
+
     private final SpaceMarineRepository spaceMarineRepository;
     private final CoordinatesRepository coordinatesRepository;
     private final ChapterRepository chapterRepository;
@@ -58,6 +60,9 @@ public class ImportServiceImpl implements ImportService {
     @Transactional(rollbackFor = Exception.class)
     @Override
     public ImportResponseDTO importSpaceMarines(ImportRequestDTO request, String username, Long existingHistoryId) {
+        logger.info("Начало импорта space marines. Пользователь: {}, количество объектов: {}", 
+            username, request != null && request.spaceMarines() != null ? request.spaceMarines().size() : 0);
+        
         // Используем существующую запись или создаем новую
         ImportHistory importHistory;
         if (existingHistoryId != null) {
@@ -103,10 +108,20 @@ public class ImportServiceImpl implements ImportService {
 
             List<SpaceMarine> createdMarines = new ArrayList<>();
             List<String> validationErrors = new ArrayList<>();
+            
+            // Списки для отложенного сохранения - все сущности будут сохранены только в конце, если нет ошибок
+            List<Coordinates> coordinatesToSave = new ArrayList<>();
+            List<Chapter> chaptersToSave = new ArrayList<>();
+            List<SpaceMarine> marinesToSave = new ArrayList<>();
+            List<Long> existingChapterIdsToUpdate = new ArrayList<>(); // ID существующих глав, для которых нужно обновить счетчик
 
-            // Обрабатываем каждый SpaceMarine из запроса
+            logger.info("Начинаем обработку {} объектов space marines", request.spaceMarines().size());
+            
+            // Обрабатываем каждый SpaceMarine из запроса - НЕ сохраняем сразу, только валидируем и подготавливаем
             for (int i = 0; i < request.spaceMarines().size(); i++) {
                 SpaceMarineImportDTO importDTO = request.spaceMarines().get(i);
+                logger.info("Обработка объекта #{}: name={}, health={}, heartCount={}", 
+                    i + 1, importDTO.name(), importDTO.health(), importDTO.heartCount());
                 
                 try {
                     // Валидация DTO
@@ -185,7 +200,10 @@ public class ImportServiceImpl implements ImportService {
                             continue;
                         }
                         
-                        coordinates = coordinatesRepository.save(coordinates);
+                        // НЕ сохраняем сразу - добавим в список для отложенного сохранения
+                        coordinatesToSave.add(coordinates);
+                        logger.info("Координаты для объекта #{} подготовлены к сохранению: x={}, y={}", 
+                            i + 1, coordinates.getX(), coordinates.getY());
                     }
 
                     // Создаем или находим Chapter
@@ -204,6 +222,8 @@ public class ImportServiceImpl implements ImportService {
                             validationErrors.add("Объект #" + (i + 1) + ": Глава " + chapter.getName() + " уже содержит максимальное количество маринов (1000)");
                             continue;
                         }
+                        // Существующая глава - запомним ID для обновления счетчика
+                        existingChapterIdsToUpdate.add(chapter.getId());
                     } else if (importDTO.chapter() != null) {
                         // Создаем новую главу или ищем по имени
                         ChapterDTO chapterDTO = importDTO.chapter();
@@ -215,6 +235,8 @@ public class ImportServiceImpl implements ImportService {
                                 validationErrors.add("Объект #" + (i + 1) + ": Глава " + chapter.getName() + " уже содержит максимальное количество маринов (1000)");
                                 continue;
                             }
+                            // Существующая глава - запомним ID для обновления счетчика
+                            existingChapterIdsToUpdate.add(chapter.getId());
                         } else {
                             // При создании нового Chapter счетчик должен быть 1, так как мы сразу добавляем марина
                             chapter = new Chapter();
@@ -231,8 +253,11 @@ public class ImportServiceImpl implements ImportService {
                                 continue;
                             }
                             
-                            chapter = chapterRepository.save(chapter);
+                            // НЕ сохраняем сразу - добавим в список для отложенного сохранения
+                            chaptersToSave.add(chapter);
                             isNewChapter = true;
+                            logger.info("Глава для объекта #{} подготовлена к сохранению: name={}, marinesCount={}", 
+                                i + 1, chapter.getName(), chapter.getMarinesCount());
                         }
                     }
 
@@ -243,12 +268,17 @@ public class ImportServiceImpl implements ImportService {
                     spaceMarine.setChapter(chapter);
                     spaceMarine.setHealth(importDTO.health());
                     spaceMarine.setHeartCount(importDTO.heartCount());
+                    
+                    // Устанавливаем creationDate перед валидацией
+                    spaceMarine.setCreationDate(java.time.ZonedDateTime.now());
+                    logger.info("Установлен creationDate для объекта #{}: {}", i + 1, spaceMarine.getCreationDate());
 
                     // Обработка категории
                     if (importDTO.category() != null && !importDTO.category().trim().isEmpty()) {
                         try {
                             spaceMarine.setCategory(AstartesCategory.valueOf(importDTO.category()));
                         } catch (IllegalArgumentException e) {
+                            logger.error("Ошибка установки категории для объекта #{}: {}", i + 1, importDTO.category(), e);
                             throw new ValidationException("Неверная категория: " + importDTO.category());
                         }
                     }
@@ -258,64 +288,107 @@ public class ImportServiceImpl implements ImportService {
                         try {
                             spaceMarine.setWeaponType(Weapon.valueOf(importDTO.weaponType()));
                         } catch (IllegalArgumentException e) {
+                            logger.error("Ошибка установки типа оружия для объекта #{}: {}", i + 1, importDTO.weaponType(), e);
                             throw new ValidationException("Неверный тип оружия: " + importDTO.weaponType());
                         }
                     }
 
                     // Валидация сущности (включая кастомные валидаторы)
+                    logger.info("Валидация SpaceMarine для объекта #{}: name={}", i + 1, spaceMarine.getName());
                     Set<ConstraintViolation<SpaceMarine>> marineViolations = validator.validate(spaceMarine);
                     if (!marineViolations.isEmpty()) {
                         String errorMsg = marineViolations.stream()
                                 .map(ConstraintViolation::getMessage)
                                 .collect(Collectors.joining("; "));
+                        logger.error("Ошибка валидации SpaceMarine для объекта #{}: {}", i + 1, errorMsg);
                         validationErrors.add("Объект #" + (i + 1) + ": " + errorMsg);
                         continue;
                     }
+                    logger.info("Валидация SpaceMarine для объекта #{} прошла успешно", i + 1);
 
-                    // Сохраняем SpaceMarine
-                    spaceMarine = spaceMarineRepository.save(spaceMarine);
-
-                    // Обновляем счетчик в Chapter только если это существующая глава
-                    // Для новой главы счетчик уже установлен в 1 при создании
+                    // НЕ сохраняем SpaceMarine сразу - добавим в список для отложенного сохранения
+                    marinesToSave.add(spaceMarine);
+                    logger.info("SpaceMarine для объекта #{} подготовлен к сохранению: name={}", 
+                        i + 1, spaceMarine.getName());
+                    
+                    // Если это существующая глава, запомним ID для обновления счетчика
                     if (chapter != null && !isNewChapter) {
-                        chapterRepository.addMarineToChapter(chapter.getId());
+                        if (!existingChapterIdsToUpdate.contains(chapter.getId())) {
+                            existingChapterIdsToUpdate.add(chapter.getId());
+                        }
                     }
 
-                    createdMarines.add(spaceMarine);
-
                 } catch (Exception e) {
-                    validationErrors.add("Объект #" + (i + 1) + ": " + e.getMessage());
+                    String errorMessage = e.getMessage();
+                    if (errorMessage == null || errorMessage.trim().isEmpty()) {
+                        errorMessage = e.getClass().getSimpleName();
+                    }
+                    logger.error("ОШИБКА при обработке объекта #{}: {}", i + 1, errorMessage, e);
+                    logger.error("Тип ошибки: {}, сообщение: {}", e.getClass().getName(), errorMessage);
+                    if (e.getCause() != null) {
+                        logger.error("Причина: {} - {}", e.getCause().getClass().getName(), e.getCause().getMessage());
+                        logger.error("Stack trace причины:", e.getCause());
+                    }
+                    logger.error("Полный stack trace ошибки:", e);
+                    validationErrors.add("Объект #" + (i + 1) + ": " + errorMessage);
                 }
             }
 
-            // Если были ошибки валидации, устанавливаем статус FAILED
+            // Если были ошибки валидации, устанавливаем статус FAILED и откатываем транзакцию
             if (!validationErrors.isEmpty()) {
                 String errorMessage = String.join("; ", validationErrors);
+                logger.error("Обнаружены ошибки валидации при импорте: {}", errorMessage);
+                logger.error("Количество ошибок: {}", validationErrors.size());
+                logger.error("Список ошибок валидации: {}", errorMessage);
+                logger.error("Сущности НЕ будут сохранены из-за ошибок валидации");
                 importHistory.setStatus(ImportStatus.FAILED);
                 importHistory.setErrorMessage(errorMessage);
                 importHistory = importHistoryRepository.save(importHistory);
-                return new ImportResponseDTO(
-                        importHistory.getId(), 
-                        "FAILED", 
-                        0, 
-                        "Ошибки при импорте",
-                        errorMessage
-                );
+                // Выбрасываем исключение для отката транзакции - все сущности будут откачены
+                throw new ValidationException("Ошибки при импорте: " + errorMessage);
             }
 
             // Если не было создано ни одного объекта
-            if (createdMarines.isEmpty()) {
+            if (marinesToSave.isEmpty()) {
                 String errorMessage = "Не было создано ни одного объекта";
+                logger.error("Не было создано ни одного объекта при импорте");
                 importHistory.setStatus(ImportStatus.FAILED);
                 importHistory.setErrorMessage(errorMessage);
                 importHistory = importHistoryRepository.save(importHistory);
-                return new ImportResponseDTO(
-                        importHistory.getId(), 
-                        "FAILED", 
-                        0, 
-                        "Ошибка импорта",
-                        errorMessage
-                );
+                // Выбрасываем исключение для отката транзакции
+                throw new ValidationException(errorMessage);
+            }
+            
+            // Все валидации прошли успешно - теперь сохраняем все сущности в правильном порядке
+            logger.info("Все валидации прошли успешно. Начинаем сохранение сущностей:");
+            logger.info("Координат для сохранения: {}", coordinatesToSave.size());
+            logger.info("Глав для сохранения: {}", chaptersToSave.size());
+            logger.info("SpaceMarines для сохранения: {}", marinesToSave.size());
+            
+            // Сохраняем координаты
+            for (Coordinates coord : coordinatesToSave) {
+                coord = coordinatesRepository.save(coord);
+                logger.info("Координаты сохранены: id={}, x={}, y={}", coord.getId(), coord.getX(), coord.getY());
+            }
+            
+            // Сохраняем главы
+            for (Chapter ch : chaptersToSave) {
+                ch = chapterRepository.save(ch);
+                logger.info("Глава сохранена: id={}, name={}, marinesCount={}", 
+                    ch.getId(), ch.getName(), ch.getMarinesCount());
+            }
+            
+            // Сохраняем SpaceMarines
+            for (SpaceMarine marine : marinesToSave) {
+                marine = spaceMarineRepository.save(marine);
+                createdMarines.add(marine);
+                logger.info("SpaceMarine сохранен: id={}, name={}", marine.getId(), marine.getName());
+            }
+            
+            // Обновляем счетчики в существующих главах
+            for (Long chapterId : existingChapterIdsToUpdate) {
+                logger.info("Обновление счетчика маринов в главе: chapterId={}", chapterId);
+                chapterRepository.addMarineToChapter(chapterId);
             }
 
             // Успешный импорт
@@ -331,11 +404,31 @@ public class ImportServiceImpl implements ImportService {
                     "Успешно импортировано " + createdMarines.size() + " объектов"
             );
 
-        } catch (Exception e) {
-            // Обновляем статус на FAILED при любой ошибке
+        } catch (ValidationException e) {
+            // Для ValidationException не нужно логировать, так как это ожидаемая ошибка валидации
+            // Обновляем статус на FAILED при ошибке валидации
             importHistory.setStatus(ImportStatus.FAILED);
             if (importHistory.getErrorMessage() == null) {
                 importHistory.setErrorMessage(e.getMessage());
+            }
+            importHistory = importHistoryRepository.save(importHistory);
+            throw e; // Откатываем транзакцию
+        } catch (Exception e) {
+            // Обновляем статус на FAILED при любой другой ошибке
+            logger.error("ОШИБКА при импорте space marines: пользователь={}", username, e);
+            logger.error("Тип ошибки: {}, сообщение: {}", e.getClass().getName(), e.getMessage());
+            if (e.getCause() != null) {
+                logger.error("Причина: {} - {}", e.getCause().getClass().getName(), e.getCause().getMessage());
+                logger.error("Stack trace причины:", e.getCause());
+            }
+            logger.error("Полный stack trace ошибки:", e);
+            importHistory.setStatus(ImportStatus.FAILED);
+            if (importHistory.getErrorMessage() == null) {
+                String errorMessage = e.getMessage();
+                if (errorMessage == null || errorMessage.trim().isEmpty()) {
+                    errorMessage = "Неизвестная ошибка: " + e.getClass().getSimpleName();
+                }
+                importHistory.setErrorMessage(errorMessage);
             }
             importHistory = importHistoryRepository.save(importHistory);
             throw e; // Откатываем транзакцию
