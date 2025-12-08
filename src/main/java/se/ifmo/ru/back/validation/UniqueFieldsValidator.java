@@ -32,6 +32,11 @@ public class UniqueFieldsValidator implements ConstraintValidator<UniqueFields, 
             return true;
         }
 
+        // Если repositoryProvider не инициализирован (создан не через Spring), пропускаем валидацию
+        if (repositoryProvider == null) {
+            return true;
+        }
+
         try {
             // Получаем репозиторий для типа сущности
             JpaRepository<?, ?> repository = repositoryProvider.getRepository(entity.getClass());

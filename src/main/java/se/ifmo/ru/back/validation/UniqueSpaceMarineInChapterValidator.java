@@ -30,6 +30,11 @@ public class UniqueSpaceMarineInChapterValidator implements ConstraintValidator<
             return true;
         }
 
+        // Если репозиторий не инициализирован (создан не через Spring), пропускаем валидацию
+        if (spaceMarineRepository == null) {
+            return true;
+        }
+
         Long chapterId = spaceMarine.getChapter().getId();
 
         // Получаем все десантники в этой главе
