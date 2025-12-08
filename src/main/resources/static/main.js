@@ -120,16 +120,57 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
 
     document.getElementById("createMarineBtn").addEventListener("click", () => {
+        // Снимаем выделение со всех строк
+        document.querySelectorAll("#marineTable tr").forEach(r => r.classList.remove("selected"));
         selectedMarine = null; // Режим создания
         document.getElementById("marineForm").reset();
+        console.log("Режим создания: selectedMarine сброшен, форма очищена");
         modal.style.display = "block";
     });
     
     document.getElementById("updateMarineBtn").addEventListener("click", async () => {
-        if (!selectedMarine) {
-            await showAlert("Выберите десантника для редактирования", "Предупреждение");
+        console.log("=== Кнопка Обновить нажата ===");
+        console.log("selectedMarine:", selectedMarine);
+        console.log("selectedMarine?.id:", selectedMarine?.id);
+        
+        // Проверяем, есть ли выделенная строка в таблице
+        const selectedRow = document.querySelector("#marineTable tr.selected");
+        console.log("selectedRow:", selectedRow);
+        
+        if (!selectedMarine || !selectedMarine.id) {
+            // Пробуем получить данные из выделенной строки
+            if (selectedRow && selectedRow.marineData) {
+                console.log("Используем данные из выделенной строки");
+                selectedMarine = selectedRow.marineData;
+            } else {
+                await showAlert("Выберите десантника для редактирования", "Предупреждение");
+                return;
+            }
+        }
+        
+        // Убеждаемся, что строка выделена в таблице
+        const rows = document.querySelectorAll("#marineTable tbody tr");
+        let found = false;
+        for (let row of rows) {
+            const idCell = row.cells[0];
+            if (idCell && idCell.textContent.trim() === selectedMarine.id.toString()) {
+                document.querySelectorAll("#marineTable tr").forEach(r => r.classList.remove("selected"));
+                row.classList.add("selected");
+                found = true;
+                // Обновляем selectedMarine из данных строки, если они есть
+                if (row.marineData) {
+                    selectedMarine = row.marineData;
+                }
+                break;
+            }
+        }
+        if (!found) {
+            await showAlert("Не удалось найти выбранного десантника в таблице", "Ошибка");
             return;
         }
+        
+        console.log("Режим обновления: selectedMarine.id =", selectedMarine.id);
+        console.log("selectedMarine полный объект:", selectedMarine);
         fillFormForEdit(selectedMarine);
         modal.style.display = "block";
     });
@@ -825,6 +866,9 @@ async function updateMarineInline(marineId, updatedData, cell, displayValue, act
             // Обновляем selectedMarine если это тот же объект
             if (selectedMarine && selectedMarine.id === marineId) {
                 Object.assign(selectedMarine, updatedData);
+                // Гарантируем, что ID не потерян
+                selectedMarine.id = marineId;
+                console.log("selectedMarine обновлен после inline редактирования:", selectedMarine);
             }
         } else {
             const errorData = await res.json().catch(() => ({ error: res.statusText }));
@@ -860,8 +904,17 @@ function clearFilter() {
 }
 
 
+let isSaving = false; // Флаг для предотвращения двойной отправки
+
 async function saveMarine(e) {
     e.preventDefault();
+    
+    // Защита от двойной отправки
+    if (isSaving) {
+        console.log("Форма уже отправляется, игнорируем повторный запрос");
+        return;
+    }
+    
     const form = e.target;
     
     // Валидация обязательных полей
@@ -908,12 +961,29 @@ async function saveMarine(e) {
 
     // Отладка
     console.log("Отправляемые данные:", data);
+    console.log("selectedMarine:", selectedMarine);
+    console.log("Режим обновления:", selectedMarine && selectedMarine.id);
 
     try {
+        // Проверяем, есть ли выделенный марин и его ID
+        // Если selectedMarine установлен и имеет ID, это режим обновления
         const isUpdate = selectedMarine && selectedMarine.id;
         const selectedId = isUpdate ? selectedMarine.id : null; // Сохраняем ID для восстановления выделения
+        
+        console.log("=== saveMarine ===");
+        console.log("selectedMarine:", selectedMarine);
+        console.log("selectedMarine.id:", selectedMarine?.id);
+        console.log("isUpdate:", isUpdate);
+        console.log("selectedId:", selectedId);
+        
         const url = isUpdate ? `${API_BASE}/${selectedMarine.id}` : API_BASE;
         const method = isUpdate ? "PUT" : "POST";
+        
+        console.log("URL:", url);
+        console.log("Method:", method);
+        console.log("==================");
+        
+        isSaving = true; // Устанавливаем флаг
         
         const res = await fetch(url, {
             method: method,
@@ -957,6 +1027,8 @@ async function saveMarine(e) {
         }
     } catch(e) { 
         await showAlert("Ошибка: " + e.message, "Ошибка"); 
+    } finally {
+        isSaving = false; // Сбрасываем флаг в любом случае
     }
 }
 

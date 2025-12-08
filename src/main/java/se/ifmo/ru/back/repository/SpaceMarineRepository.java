@@ -82,11 +82,12 @@ public interface SpaceMarineRepository extends JpaRepository<SpaceMarine, Intege
     // Проверка уникальности с блокировкой для предотвращения race conditions
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT sm FROM SpaceMarine sm WHERE sm.chapter.id = :chapterId AND sm.health = :health " +
-           "AND sm.weaponType = :weaponType AND sm.coordinates.id = :coordinatesId")
+           "AND (sm.weaponType = :weaponType OR (sm.weaponType IS NULL AND :weaponType IS NULL)) " +
+           "AND sm.coordinates.id = :coordinatesId")
     List<SpaceMarine> findByChapterAndHealthAndWeaponAndCoordinatesWithLock(
             @Param("chapterId") Long chapterId,
             @Param("health") Integer health,
-            @Param("weaponType") String weaponType,
+            @Param("weaponType") se.ifmo.ru.back.entity.Weapon weaponType,
             @Param("coordinatesId") Long coordinatesId);
     
     // Поиск с блокировкой для обновления

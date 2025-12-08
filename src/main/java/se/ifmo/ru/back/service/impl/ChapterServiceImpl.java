@@ -55,27 +55,27 @@ public class ChapterServiceImpl implements ChapterService {
     public Chapter createChapter(Chapter chapter) {
         logger.info("Создание главы: name={}, marinesCount={}", chapter.getName(), chapter.getMarinesCount());
         try {
-            // Проверка уникальности с блокировкой для предотвращения race conditions
+        // Проверка уникальности с блокировкой для предотвращения race conditions
             logger.info("Проверка уникальности главы: name={}, marinesCount={}", chapter.getName(), chapter.getMarinesCount());
-            Optional<Chapter> existing = chapterRepository.findByNameAndMarinesCountWithLock(
-                    chapter.getName(), chapter.getMarinesCount());
-            if (existing.isPresent()) {
+        Optional<Chapter> existing = chapterRepository.findByNameAndMarinesCountWithLock(
+                chapter.getName(), chapter.getMarinesCount());
+        if (existing.isPresent()) {
                 logger.error("Глава с таким именем и количеством маринов уже существует: name={}, marinesCount={}", 
                     chapter.getName(), chapter.getMarinesCount());
-                throw new ValidationException("Глава с таким именем и количеством маринов уже существует");
-            }
+            throw new ValidationException("Глава с таким именем и количеством маринов уже существует");
+        }
             logger.info("Проверка уникальности прошла успешно");
-            
-            // Валидация сущности (включая кастомные валидаторы)
+        
+        // Валидация сущности (включая кастомные валидаторы)
             logger.info("Валидация главы: name={}", chapter.getName());
-            Set<ConstraintViolation<Chapter>> violations = validator.validate(chapter);
-            if (!violations.isEmpty()) {
-                String errorMessage = violations.stream()
-                        .map(ConstraintViolation::getMessage)
-                        .collect(Collectors.joining("; "));
+        Set<ConstraintViolation<Chapter>> violations = validator.validate(chapter);
+        if (!violations.isEmpty()) {
+            String errorMessage = violations.stream()
+                    .map(ConstraintViolation::getMessage)
+                    .collect(Collectors.joining("; "));
                 logger.error("Ошибка валидации главы: {}", errorMessage);
-                throw new ValidationException(errorMessage);
-            }
+            throw new ValidationException(errorMessage);
+        }
             logger.info("Валидация главы прошла успешно");
             
             logger.info("Сохранение главы в БД: name={}, marinesCount={}", chapter.getName(), chapter.getMarinesCount());
@@ -130,10 +130,10 @@ public class ChapterServiceImpl implements ChapterService {
     public List<Chapter> getChapters(int page, int size) {
         logger.info("Получение глав с пагинацией: page={}, size={}", page, size);
         try {
-            Pageable pageable = PageRequest.of(page, size);
-            Page<Chapter> pageResult = chapterRepository.findAll(pageable);
+        Pageable pageable = PageRequest.of(page, size);
+        Page<Chapter> pageResult = chapterRepository.findAll(pageable);
             logger.info("Найдено глав: {} из {}", pageResult.getContent().size(), pageResult.getTotalElements());
-            return pageResult.getContent();
+        return pageResult.getContent();
         } catch (Exception e) {
             logger.error("ОШИБКА при получении глав с пагинацией: page={}, size={}", page, size, e);
             logger.error("Тип ошибки: {}, сообщение: {}", e.getClass().getName(), e.getMessage());
@@ -145,18 +145,18 @@ public class ChapterServiceImpl implements ChapterService {
         logger.info("Получение глав с пагинацией и сортировкой: page={}, size={}, sortBy={}, sortOrder={}", 
             page, size, sortBy, sortOrder);
         try {
-            Pageable pageable;
-            if (sortBy != null && !sortBy.trim().isEmpty()) {
-                Sort sort = "desc".equalsIgnoreCase(sortOrder) 
-                    ? Sort.by(sortBy).descending() 
-                    : Sort.by(sortBy).ascending();
-                pageable = PageRequest.of(page, size, sort);
-            } else {
-                pageable = PageRequest.of(page, size);
-            }
-            Page<Chapter> pageResult = chapterRepository.findAll(pageable);
+        Pageable pageable;
+        if (sortBy != null && !sortBy.trim().isEmpty()) {
+            Sort sort = "desc".equalsIgnoreCase(sortOrder) 
+                ? Sort.by(sortBy).descending() 
+                : Sort.by(sortBy).ascending();
+            pageable = PageRequest.of(page, size, sort);
+        } else {
+            pageable = PageRequest.of(page, size);
+        }
+        Page<Chapter> pageResult = chapterRepository.findAll(pageable);
             logger.info("Найдено глав: {} из {}", pageResult.getContent().size(), pageResult.getTotalElements());
-            return pageResult.getContent();
+        return pageResult.getContent();
         } catch (Exception e) {
             logger.error("ОШИБКА при получении глав с пагинацией и сортировкой: page={}, size={}, sortBy={}, sortOrder={}", 
                 page, size, sortBy, sortOrder, e);
@@ -201,46 +201,46 @@ public class ChapterServiceImpl implements ChapterService {
         logger.info("Обновление главы: id={}, name={}, marinesCount={}", 
             id, updatedChapter.getName(), updatedChapter.getMarinesCount());
         try {
-            // Сначала находим объект, затем блокируем его для обновления
+        // Сначала находим объект, затем блокируем его для обновления
             logger.info("Поиск главы для обновления: id={}", id);
-            Optional<Chapter> existingChapterOpt = chapterRepository.findById(id);
-            if (!existingChapterOpt.isPresent()) {
+        Optional<Chapter> existingChapterOpt = chapterRepository.findById(id);
+        if (!existingChapterOpt.isPresent()) {
                 logger.warn("Глава не найдена для обновления: id={}", id);
-                return null;
-            }
-            
-            // Блокируем объект для обновления
+            return null;
+        }
+        
+        // Блокируем объект для обновления
             logger.info("Блокировка главы для обновления: id={}", id);
-            Chapter chapter = entityManager.find(Chapter.class, id, LockModeType.PESSIMISTIC_WRITE);
-            if (chapter == null) {
+        Chapter chapter = entityManager.find(Chapter.class, id, LockModeType.PESSIMISTIC_WRITE);
+        if (chapter == null) {
                 logger.warn("Глава не найдена после блокировки: id={}", id);
-                return null;
-            }
-            
-            // Проверяем уникальность новых значений (исключая текущий объект)
-            if (!chapter.getName().equals(updatedChapter.getName()) || 
-                chapter.getMarinesCount() != updatedChapter.getMarinesCount()) {
+            return null;
+        }
+        
+        // Проверяем уникальность новых значений (исключая текущий объект)
+        if (!chapter.getName().equals(updatedChapter.getName()) || 
+            chapter.getMarinesCount() != updatedChapter.getMarinesCount()) {
                 logger.info("Проверка уникальности новых значений: name={}, marinesCount={}", 
                     updatedChapter.getName(), updatedChapter.getMarinesCount());
-                Optional<Chapter> duplicate = chapterRepository.findByNameAndMarinesCountWithLock(
-                        updatedChapter.getName(), updatedChapter.getMarinesCount());
-                if (duplicate.isPresent() && !duplicate.get().getId().equals(id)) {
+            Optional<Chapter> duplicate = chapterRepository.findByNameAndMarinesCountWithLock(
+                    updatedChapter.getName(), updatedChapter.getMarinesCount());
+            if (duplicate.isPresent() && !duplicate.get().getId().equals(id)) {
                     logger.error("Глава с таким именем и количеством маринов уже существует: name={}, marinesCount={}", 
                         updatedChapter.getName(), updatedChapter.getMarinesCount());
-                    throw new ValidationException("Глава с таким именем и количеством маринов уже существует");
-                }
-                logger.info("Проверка уникальности прошла успешно");
+                throw new ValidationException("Глава с таким именем и количеством маринов уже существует");
             }
-            
+                logger.info("Проверка уникальности прошла успешно");
+        }
+        
             logger.info("Обновление полей главы: id={}", id);
-            chapter.setName(updatedChapter.getName());
-            chapter.setMarinesCount(updatedChapter.getMarinesCount());
-            
-            // Валидация DTO уже выполнена в контроллере через @Valid
-            // Уникальность проверена выше с блокировкой
-            // Базовые ограничения (NotNull, Min, Max) проверяются на уровне БД
-            // Не вызываем validator.validate() здесь, чтобы избежать проблем с блокировками в UniqueFieldsValidator
-            
+        chapter.setName(updatedChapter.getName());
+        chapter.setMarinesCount(updatedChapter.getMarinesCount());
+        
+        // Валидация DTO уже выполнена в контроллере через @Valid
+        // Уникальность проверена выше с блокировкой
+        // Базовые ограничения (NotNull, Min, Max) проверяются на уровне БД
+        // Не вызываем validator.validate() здесь, чтобы избежать проблем с блокировками в UniqueFieldsValidator
+        
             logger.info("Сохранение обновленной главы в БД: id={}", id);
             Chapter saved = chapterRepository.save(chapter);
             logger.info("Глава успешно обновлена: id={}, name={}, marinesCount={}", 
@@ -263,26 +263,26 @@ public class ChapterServiceImpl implements ChapterService {
     public boolean deleteChapter(Long id) {
         logger.info("Удаление главы: id={}", id);
         try {
-            Optional<Chapter> chapter = chapterRepository.findById(id);
-            if (chapter.isPresent()) {
+        Optional<Chapter> chapter = chapterRepository.findById(id);
+        if (chapter.isPresent()) {
                 logger.info("Глава найдена для удаления: id={}, name={}, marinesCount={}", 
                     id, chapter.get().getName(), chapter.get().getMarinesCount());
                 
-                // Автоматически удаляем всех маринов, связанных с этой главой
+            // Автоматически удаляем всех маринов, связанных с этой главой
                 logger.info("Проверка связанных маринов для главы: id={}", id);
-                long usageCount = spaceMarineRepository.countByChapterId(id);
-                if (usageCount > 0) {
+            long usageCount = spaceMarineRepository.countByChapterId(id);
+            if (usageCount > 0) {
                     logger.info("Удаление {} маринов, связанных с главой: id={}", usageCount, id);
-                    spaceMarineRepository.deleteByChapterId(id);
+                spaceMarineRepository.deleteByChapterId(id);
                     logger.info("Марины успешно удалены");
                 } else {
                     logger.info("Связанных маринов не найдено");
-                }
-                
+            }
+            
                 logger.info("Удаление главы из БД: id={}", id);
-                chapterRepository.deleteById(id);
+            chapterRepository.deleteById(id);
                 logger.info("Глава успешно удалена: id={}", id);
-                return true;
+            return true;
             } else {
                 logger.warn("Глава не найдена для удаления: id={}", id);
                 return false;
@@ -303,17 +303,17 @@ public class ChapterServiceImpl implements ChapterService {
     public boolean removeMarineFromChapter(Long chapterId) {
         logger.info("Удаление марина из главы: chapterId={}", chapterId);
         try {
-            Optional<Chapter> chapter = chapterRepository.findById(chapterId);
-            if (chapter.isPresent() && chapter.get().getMarinesCount() > 0) {
+        Optional<Chapter> chapter = chapterRepository.findById(chapterId);
+        if (chapter.isPresent() && chapter.get().getMarinesCount() > 0) {
                 logger.info("Глава найдена: id={}, текущее количество маринов={}", 
                     chapterId, chapter.get().getMarinesCount());
-                int updated = chapterRepository.removeMarineFromChapter(chapterId);
+            int updated = chapterRepository.removeMarineFromChapter(chapterId);
                 if (updated > 0) {
                     logger.info("Марин успешно удален из главы: chapterId={}, обновлено записей={}", chapterId, updated);
                 } else {
                     logger.warn("Не удалось удалить марина из главы: chapterId={}", chapterId);
                 }
-                return updated > 0;
+            return updated > 0;
             } else {
                 logger.warn("Глава не найдена или количество маринов равно 0: chapterId={}", chapterId);
                 return false;
@@ -333,21 +333,21 @@ public class ChapterServiceImpl implements ChapterService {
     public RelatedObjectsResponse getRelatedObjects(Long id) {
         logger.info("Получение связанных объектов для главы: id={}", id);
         try {
-            // Находим всех SpaceMarines, которые используют эту главу
+        // Находим всех SpaceMarines, которые используют эту главу
             logger.info("Поиск маринов, связанных с главой: id={}", id);
             if (spaceMarineRepository == null) {
                 logger.error("SpaceMarineRepository не инициализирован");
                 throw new IllegalStateException("SpaceMarineRepository не инициализирован");
             }
-            List<SpaceMarine> relatedMarines = spaceMarineRepository.findByChapterId(id);
+        List<SpaceMarine> relatedMarines = spaceMarineRepository.findByChapterId(id);
             logger.info("Найдено связанных маринов: {}", relatedMarines.size());
             
-            List<SpaceMarineDTO> relatedMarinesDTO = relatedMarines.stream()
-                    .map(spaceMarineMapper::toDTO)
-                    .collect(Collectors.toList());
-            
+        List<SpaceMarineDTO> relatedMarinesDTO = relatedMarines.stream()
+                .map(spaceMarineMapper::toDTO)
+                .collect(Collectors.toList());
+        
             logger.info("Успешно получены связанные объекты: количество маринов={}", relatedMarinesDTO.size());
-            return new RelatedObjectsResponse(relatedMarinesDTO);
+        return new RelatedObjectsResponse(relatedMarinesDTO);
         } catch (Exception e) {
             logger.error("ОШИБКА при получении связанных объектов для главы: id={}", id, e);
             logger.error("Тип ошибки: {}, сообщение: {}", e.getClass().getName(), e.getMessage());

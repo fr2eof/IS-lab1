@@ -84,7 +84,7 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
                 List<SpaceMarine> duplicates = spaceMarineRepository.findByChapterAndHealthAndWeaponAndCoordinatesWithLock(
                         spaceMarine.getChapter().getId(),
                         spaceMarine.getHealth(),
-                        spaceMarine.getWeaponType() != null ? spaceMarine.getWeaponType().name() : null,
+                        spaceMarine.getWeaponType(),
                         spaceMarine.getCoordinates().getId());
                 if (!duplicates.isEmpty()) {
                     logger.warn("Попытка создать дубликат space marine: name={}, chapterId={}, health={}", 
@@ -333,7 +333,7 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
                 List<SpaceMarine> duplicates = spaceMarineRepository.findByChapterAndHealthAndWeaponAndCoordinatesWithLock(
                         updatedSpaceMarine.getChapter().getId(),
                         updatedSpaceMarine.getHealth(),
-                        updatedSpaceMarine.getWeaponType() != null ? updatedSpaceMarine.getWeaponType().name() : null,
+                        updatedSpaceMarine.getWeaponType(),
                         updatedSpaceMarine.getCoordinates().getId());
                 if (!duplicates.isEmpty() && !duplicates.get(0).getId().equals(id)) {
                     logger.warn("Попытка обновить на дубликат: id={}, chapterId={}, health={}", 
@@ -425,10 +425,20 @@ public class SpaceMarineServiceImpl implements SpaceMarineService {
                     !oldCoordinatesId.equals(dto.coordinatesId()) ||
                     (spaceMarine.getWeaponType() != null ? spaceMarine.getWeaponType().name() : null) != 
                     (dto.weaponType() != null ? dto.weaponType() : null)) {
+                    // Преобразуем строку weaponType в enum Weapon
+                    Weapon weaponTypeEnum = null;
+                    if (dto.weaponType() != null && !dto.weaponType().trim().isEmpty()) {
+                        try {
+                            weaponTypeEnum = Weapon.valueOf(dto.weaponType());
+                        } catch (IllegalArgumentException e) {
+                            logger.error("Неверный тип оружия при проверке уникальности: {}", dto.weaponType());
+                            throw new IllegalArgumentException("Неверный тип оружия: " + dto.weaponType());
+                        }
+                    }
                     List<SpaceMarine> duplicates = spaceMarineRepository.findByChapterAndHealthAndWeaponAndCoordinatesWithLock(
                             dto.chapterId(),
                             dto.health(),
-                            dto.weaponType(),
+                            weaponTypeEnum,
                             dto.coordinatesId());
                     if (!duplicates.isEmpty() && !duplicates.get(0).getId().equals(id)) {
                         logger.warn("Попытка обновить на дубликат из DTO: id={}, chapterId={}, health={}", 
