@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import se.ifmo.ru.back.dto.*;
 import se.ifmo.ru.back.entity.*;
+import se.ifmo.ru.back.entity.Weapon;
 import se.ifmo.ru.back.exception.AccessDeniedException;
 import se.ifmo.ru.back.exception.EntityNotFoundException;
 import se.ifmo.ru.back.exception.ValidationException;
@@ -37,29 +38,85 @@ public class ImportServiceImpl implements ImportService {
     private final ChapterRepository chapterRepository;
     private final ImportHistoryRepository importHistoryRepository;
     private final Validator validator;
+    private final LockManager lockManager;
 
     public ImportServiceImpl(
             SpaceMarineRepository spaceMarineRepository,
             CoordinatesRepository coordinatesRepository,
             ChapterRepository chapterRepository,
             ImportHistoryRepository importHistoryRepository,
-            Validator validator) {
+            Validator validator,
+            LockManager lockManager) {
         this.spaceMarineRepository = spaceMarineRepository;
         this.coordinatesRepository = coordinatesRepository;
         this.chapterRepository = chapterRepository;
         this.importHistoryRepository = importHistoryRepository;
         this.validator = validator;
+        this.lockManager = lockManager;
+    }
+    
+    /**
+     * Генерирует ключ блокировки для координат на основе x и y.
+     * Используется для предотвращения создания дубликатов координат.
+     */
+    private String getCoordinatesLockKey(Float x, Double y) {
+        return "coords_" + x + "_" + (y != null ? y : "null");
+    }
+    
+    /**
+     * Генерирует ключ блокировки для главы на основе name и marinesCount.
+     * Используется для предотвращения создания дубликатов глав.
+     */
+    private String getChapterLockKey(String name, Integer marinesCount) {
+        return "chapter_" + name + "_" + marinesCount;
+    }
+    
+    /**
+     * Генерирует ключ блокировки для SpaceMarine в главе.
+     * Используется для предотвращения создания дубликатов маринов в одной главе.
+     */
+    private String getSpaceMarineLockKey(Chapter chapter, Coordinates coordinates, Integer health, Weapon weaponType) {
+        String chapterPart;
+        if (chapter == null) {
+            chapterPart = "no_chapter";
+        } else if (chapter.getId() != null) {
+            chapterPart = "chapterId_" + chapter.getId();
+        } else {
+            chapterPart = "chapterNew_" + chapter.getName() + "_" + chapter.getMarinesCount();
+        }
+
+        String coordsPart;
+        if (coordinates == null) {
+            coordsPart = "no_coords";
+        } else if (coordinates.getId() != null) {
+            coordsPart = "coordsId_" + coordinates.getId();
+        } else {
+            coordsPart = "coordsNew_" + coordinates.getX() + "_" + coordinates.getY();
+        }
+
+        String weaponPart = weaponType != null ? weaponType.name() : "null";
+
+        return "marine_" + chapterPart + "_health_" + health + "_weapon_" + weaponPart + "_" + coordsPart;
     }
 
     @Transactional(rollbackFor = Exception.class)
     @Override
     public ImportResponseDTO importSpaceMarines(ImportRequestDTO request, String username) {
-        return importSpaceMarines(request, username, null);
+        // Глобальная последовательная обработка импортов
+        return lockManager.executeWithLock("import_global", () -> importSpaceMarinesInternal(request, username, null));
     }
     
     @Transactional(rollbackFor = Exception.class)
     @Override
     public ImportResponseDTO importSpaceMarines(ImportRequestDTO request, String username, Long existingHistoryId) {
+        // Глобальная последовательная обработка импортов
+        return lockManager.executeWithLock("import_global", () -> importSpaceMarinesInternal(request, username, existingHistoryId));
+    }
+    
+    /**
+     * Внутренняя реализация импорта. Предполагается, что вызов защищен глобальной блокировкой.
+     */
+    private ImportResponseDTO importSpaceMarinesInternal(ImportRequestDTO request, String username, Long existingHistoryId) {
         logger.info("Начало импорта space marines. Пользователь: {}, количество объектов: {}", 
             username, request != null && request.spaceMarines() != null ? request.spaceMarines().size() : 0);
         
@@ -108,7 +165,7 @@ public class ImportServiceImpl implements ImportService {
 
             List<SpaceMarine> createdMarines = new ArrayList<>();
             List<String> validationErrors = new ArrayList<>();
-            
+
             // Списки для отложенного сохранения - все сущности будут сохранены только в конце, если нет ошибок
             List<Coordinates> coordinatesToSave = new ArrayList<>();
             List<Chapter> chaptersToSave = new ArrayList<>();
@@ -118,7 +175,8 @@ public class ImportServiceImpl implements ImportService {
             logger.info("Начинаем обработку {} объектов space marines", request.spaceMarines().size());
             
             // Обрабатываем каждый SpaceMarine из запроса - НЕ сохраняем сразу, только валидируем и подготавливаем
-            for (int i = 0; i < request.spaceMarines().size(); i++) {
+            for (int idx = 0; idx < request.spaceMarines().size(); idx++) {
+                final int i = idx; // Делаем final для использования в лямбдах
                 SpaceMarineImportDTO importDTO = request.spaceMarines().get(i);
                 logger.info("Обработка объекта #{}: name={}, health={}, heartCount={}", 
                     i + 1, importDTO.name(), importDTO.health(), importDTO.heartCount());
@@ -186,29 +244,55 @@ public class ImportServiceImpl implements ImportService {
                     } else {
                         // Создаем новые координаты
                         CoordinatesDTO coordDTO = importDTO.coordinates();
-                        coordinates = new Coordinates();
-                        coordinates.setX(coordDTO.x());
-                        coordinates.setY(coordDTO.y());
+                        
+                        // Блокируем проверку уникальности координат на уровне приложения
+                        String coordsLockKey = getCoordinatesLockKey(coordDTO.x(), coordDTO.y());
+                        coordinates = lockManager.executeWithLock(coordsLockKey, () -> {
+                            // Проверяем, не создали ли уже такие координаты в этой транзакции
+                            Optional<Coordinates> existingInTransaction = coordinatesToSave.stream()
+                                .filter(c -> c.getX().equals(coordDTO.x()) && 
+                                           java.util.Objects.equals(c.getY(), coordDTO.y()))
+                                .findFirst();
+                            
+                            if (existingInTransaction.isPresent()) {
+                                return existingInTransaction.get();
+                            }
+                            
+                            // Проверяем в БД с блокировкой (pessimistic locking)
+                            Optional<Coordinates> existingInDb = coordinatesRepository.findByXAndYWithLock(
+                                coordDTO.x(), coordDTO.y());
+                            
+                            if (existingInDb.isPresent()) {
+                                return existingInDb.get();
+                            }
+                            
+                            // Создаем новые координаты
+                            Coordinates newCoords = new Coordinates();
+                            newCoords.setX(coordDTO.x());
+                            newCoords.setY(coordDTO.y());
                         
                         // Валидация сущности (включая кастомные валидаторы)
-                        Set<ConstraintViolation<Coordinates>> coordViolations = validator.validate(coordinates);
+                            Set<ConstraintViolation<Coordinates>> coordViolations = validator.validate(newCoords);
                         if (!coordViolations.isEmpty()) {
                             String errorMsg = coordViolations.stream()
                                     .map(ConstraintViolation::getMessage)
                                     .collect(Collectors.joining("; "));
-                            validationErrors.add("Объект #" + (i + 1) + ", координаты: " + errorMsg);
-                            continue;
-                        }
-                        
-                        // НЕ сохраняем сразу - добавим в список для отложенного сохранения
-                        coordinatesToSave.add(coordinates);
-                        logger.info("Координаты для объекта #{} подготовлены к сохранению: x={}, y={}", 
-                            i + 1, coordinates.getX(), coordinates.getY());
+                                throw new ValidationException("Объект #" + (i + 1) + ", координаты: " + errorMsg);
+                            }
+                            
+                            // Добавляем в список для отложенного сохранения
+                            coordinatesToSave.add(newCoords);
+                            logger.info("Координаты для объекта #{} подготовлены к сохранению: x={}, y={}", 
+                                i + 1, newCoords.getX(), newCoords.getY());
+                            
+                            return newCoords;
+                        });
                     }
 
                     // Создаем или находим Chapter
-                    Chapter chapter = null;
-                    boolean isNewChapter = false;
+                    final java.util.concurrent.atomic.AtomicReference<Chapter> chapterRef = new java.util.concurrent.atomic.AtomicReference<>();
+                    final java.util.concurrent.atomic.AtomicBoolean isNewChapterRef = new java.util.concurrent.atomic.AtomicBoolean(false);
+                    
                     if (importDTO.chapterId() != null) {
                         // Используем существующую главу по ID
                         Optional<Chapter> existingChapter = chapterRepository.findById(importDTO.chapterId());
@@ -216,7 +300,7 @@ public class ImportServiceImpl implements ImportService {
                             validationErrors.add("Объект #" + (i + 1) + ": Глава с ID " + importDTO.chapterId() + " не найдена");
                             continue;
                         }
-                        chapter = existingChapter.get();
+                        Chapter chapter = existingChapter.get();
                         // Проверяем, не превышен ли лимит маринов в главе
                         if (chapter.getMarinesCount() >= 1000) {
                             validationErrors.add("Объект #" + (i + 1) + ": Глава " + chapter.getName() + " уже содержит максимальное количество маринов (1000)");
@@ -224,42 +308,80 @@ public class ImportServiceImpl implements ImportService {
                         }
                         // Существующая глава - запомним ID для обновления счетчика
                         existingChapterIdsToUpdate.add(chapter.getId());
+                        chapterRef.set(chapter);
                     } else if (importDTO.chapter() != null) {
                         // Создаем новую главу или ищем по имени
                         ChapterDTO chapterDTO = importDTO.chapter();
-                        Optional<Chapter> existingChapter = chapterRepository.findByName(chapterDTO.name());
-                        if (existingChapter.isPresent()) {
-                            chapter = existingChapter.get();
+                        
+                        // Блокируем проверку уникальности главы на уровне приложения
+                        String chapterLockKey = getChapterLockKey(chapterDTO.name(), chapterDTO.marinesCount());
+                        Chapter chapter = lockManager.executeWithLock(chapterLockKey, () -> {
+                            // Сначала ищем по имени (без блокировки, так как блокировка на уровне приложения)
+                            Optional<Chapter> existingByName = chapterRepository.findByName(chapterDTO.name());
+                            
+                            if (existingByName.isPresent()) {
+                                Chapter existing = existingByName.get();
                             // Проверяем, не превышен ли лимит маринов в главе
-                            if (chapter.getMarinesCount() >= 1000) {
-                                validationErrors.add("Объект #" + (i + 1) + ": Глава " + chapter.getName() + " уже содержит максимальное количество маринов (1000)");
-                                continue;
+                                if (existing.getMarinesCount() >= 1000) {
+                                    throw new ValidationException("Объект #" + (i + 1) + ": Глава " + existing.getName() + 
+                                        " уже содержит максимальное количество маринов (1000)");
+                                }
+                                // Существующая глава - запомним ID для обновления счетчика
+                                existingChapterIdsToUpdate.add(existing.getId());
+                                return existing;
                             }
-                            // Существующая глава - запомним ID для обновления счетчика
-                            existingChapterIdsToUpdate.add(chapter.getId());
-                        } else {
+                            
+                            // Проверяем, не создали ли уже такую главу в этой транзакции
+                            Optional<Chapter> existingInTransaction = chaptersToSave.stream()
+                                .filter(c -> c.getName().equals(chapterDTO.name()) && 
+                                           c.getMarinesCount() == chapterDTO.marinesCount())
+                                .findFirst();
+                            
+                            if (existingInTransaction.isPresent()) {
+                                return existingInTransaction.get();
+                            }
+                            
+                            // Проверяем в БД с блокировкой (pessimistic locking)
+                            Optional<Chapter> existingInDb = chapterRepository.findByNameAndMarinesCountWithLock(
+                                chapterDTO.name(), chapterDTO.marinesCount());
+                            
+                            if (existingInDb.isPresent()) {
+                                Chapter existing = existingInDb.get();
+                                if (existing.getMarinesCount() >= 1000) {
+                                    throw new ValidationException("Объект #" + (i + 1) + ": Глава " + existing.getName() + 
+                                        " уже содержит максимальное количество маринов (1000)");
+                                }
+                                existingChapterIdsToUpdate.add(existing.getId());
+                                return existing;
+                            }
+                            
                             // При создании нового Chapter счетчик должен быть 1, так как мы сразу добавляем марина
-                            chapter = new Chapter();
-                            chapter.setName(chapterDTO.name());
-                            chapter.setMarinesCount(1);
+                            Chapter newChapter = new Chapter();
+                            newChapter.setName(chapterDTO.name());
+                            newChapter.setMarinesCount(1);
                             
                             // Валидация сущности (включая кастомные валидаторы)
-                            Set<ConstraintViolation<Chapter>> chapterViolations = validator.validate(chapter);
+                            Set<ConstraintViolation<Chapter>> chapterViolations = validator.validate(newChapter);
                             if (!chapterViolations.isEmpty()) {
                                 String errorMsg = chapterViolations.stream()
                                         .map(ConstraintViolation::getMessage)
                                         .collect(Collectors.joining("; "));
-                                validationErrors.add("Объект #" + (i + 1) + ", глава: " + errorMsg);
-                                continue;
+                                throw new ValidationException("Объект #" + (i + 1) + ", глава: " + errorMsg);
                             }
                             
-                            // НЕ сохраняем сразу - добавим в список для отложенного сохранения
-                            chaptersToSave.add(chapter);
-                            isNewChapter = true;
+                            // Добавляем в список для отложенного сохранения
+                            chaptersToSave.add(newChapter);
                             logger.info("Глава для объекта #{} подготовлена к сохранению: name={}, marinesCount={}", 
-                                i + 1, chapter.getName(), chapter.getMarinesCount());
-                        }
+                                i + 1, newChapter.getName(), newChapter.getMarinesCount());
+                            
+                            return newChapter;
+                        });
+                        chapterRef.set(chapter);
+                        isNewChapterRef.set(chaptersToSave.contains(chapter));
                     }
+                    
+                    final Chapter chapter = chapterRef.get();
+                    final boolean isNewChapter = isNewChapterRef.get();
 
                     // Создаем SpaceMarine
                     SpaceMarine spaceMarine = new SpaceMarine();
@@ -306,18 +428,91 @@ public class ImportServiceImpl implements ImportService {
                     }
                     logger.info("Валидация SpaceMarine для объекта #{} прошла успешно", i + 1);
 
-                    // НЕ сохраняем SpaceMarine сразу - добавим в список для отложенного сохранения
-                    marinesToSave.add(spaceMarine);
-                    logger.info("SpaceMarine для объекта #{} подготовлен к сохранению: name={}", 
-                        i + 1, spaceMarine.getName());
-                    
-                    // Если это существующая глава, запомним ID для обновления счетчика
-                    if (chapter != null && !isNewChapter) {
-                        if (!existingChapterIdsToUpdate.contains(chapter.getId())) {
-                            existingChapterIdsToUpdate.add(chapter.getId());
-                        }
+                    // Проверка уникальности SpaceMarine в главе с блокировкой на уровне приложения
+                    if (chapter != null) {
+                        Weapon weaponEnum = spaceMarine.getWeaponType();
+                        String marineLockKey = getSpaceMarineLockKey(
+                            chapter,
+                            coordinates,
+                            spaceMarine.getHealth(),
+                            weaponEnum
+                        ); 
+                        
+                        lockManager.executeWithLock(marineLockKey, () -> {
+                            // Проверяем, не создали ли уже такого марина в этой транзакции
+                            boolean duplicateInTransaction = marinesToSave.stream()
+                                .anyMatch(m -> {
+                                    // Сравнение главы: если есть id, то по id, иначе по name+marinesCount
+                                    boolean sameChapter = (m.getChapter() == null && chapter == null) ||
+                                            (m.getChapter() != null && chapter != null &&
+                                             ((m.getChapter().getId() != null && chapter.getId() != null &&
+                                               m.getChapter().getId().equals(chapter.getId()))
+                                              ||
+                                              (m.getChapter().getId() == null && chapter.getId() == null &&
+                                               m.getChapter().getName().equals(chapter.getName()) &&
+                                               m.getChapter().getMarinesCount() == chapter.getMarinesCount())));
+
+                                    // Сравнение координат: если есть id, то по id, иначе по x/y
+                                    boolean sameCoords = (m.getCoordinates() == null && coordinates == null) ||
+                                            (m.getCoordinates() != null && coordinates != null &&
+                                             ((m.getCoordinates().getId() != null && coordinates.getId() != null &&
+                                               m.getCoordinates().getId().equals(coordinates.getId()))
+                                              ||
+                                              (m.getCoordinates().getId() == null && coordinates.getId() == null &&
+                                               m.getCoordinates().getX().equals(coordinates.getX()) &&
+                                               java.util.Objects.equals(m.getCoordinates().getY(), coordinates.getY()))));
+
+                                    boolean sameHealth = m.getHealth().equals(spaceMarine.getHealth());
+
+                                    String mWeapon = m.getWeaponType() != null ? m.getWeaponType().name() : null;
+                                    String weaponStr = weaponEnum != null ? weaponEnum.name() : null;
+                                    boolean sameWeapon = java.util.Objects.equals(mWeapon, weaponStr);
+
+                                    return sameChapter && sameCoords && sameHealth && sameWeapon;
+                                });
+                            
+                            if (duplicateInTransaction) {
+                                throw new ValidationException("Объект #" + (i + 1) + 
+                                    ": Десантник с таким здоровьем, оружием и координатами уже существует в этой главе");
+                            }
+                            
+                            // Проверяем в БД с блокировкой (pessimistic locking)
+                            List<SpaceMarine> duplicates = spaceMarineRepository.findByChapterAndHealthAndWeaponAndCoordinatesWithLock(
+                                chapter.getId(),
+                                spaceMarine.getHealth(),
+                                spaceMarine.getWeaponType(),
+                                coordinates.getId()
+                            );
+                            
+                            if (!duplicates.isEmpty()) {
+                                throw new ValidationException("Объект #" + (i + 1) + 
+                                    ": Десантник с таким здоровьем, оружием и координатами уже существует в этой главе");
+                            }
+                            
+                            // Все проверки прошли - добавляем в список для сохранения
+                            marinesToSave.add(spaceMarine);
+                            logger.info("SpaceMarine для объекта #{} подготовлен к сохранению: name={}", 
+                                i + 1, spaceMarine.getName());
+                            
+                            // Если это существующая глава, запомним ID для обновления счетчика
+                            if (!isNewChapter) {
+                                if (!existingChapterIdsToUpdate.contains(chapter.getId())) {
+                                    existingChapterIdsToUpdate.add(chapter.getId());
+                                }
+                            }
+                        });
+                    } else {
+                        // Если глава не указана, просто добавляем в список
+                        marinesToSave.add(spaceMarine);
+                        logger.info("SpaceMarine для объекта #{} подготовлен к сохранению: name={}", 
+                            i + 1, spaceMarine.getName());
                     }
 
+                } catch (ValidationException e) {
+                    // ValidationException уже содержит понятное сообщение
+                    String errorMessage = e.getMessage();
+                    logger.error("Ошибка валидации при обработке объекта #{}: {}", i + 1, errorMessage);
+                    validationErrors.add("Объект #" + (i + 1) + ": " + errorMessage);
                 } catch (Exception e) {
                     String errorMessage = e.getMessage();
                     if (errorMessage == null || errorMessage.trim().isEmpty()) {
