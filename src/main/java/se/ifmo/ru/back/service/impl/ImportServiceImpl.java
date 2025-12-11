@@ -655,6 +655,14 @@ public class ImportServiceImpl implements ImportService {
     @Transactional(rollbackFor = Exception.class)
     @Override
     public ImportResponseDTO importFromFile(String fileContent, String username, String fileName) {
+        // Глобальная последовательная обработка импортов
+        return lockManager.executeWithLock("import_global", () -> importFromFileInternal(fileContent, username, fileName));
+    }
+    
+    /**
+     * Внутренняя реализация импорта из файла. Предполагается, что вызов защищен глобальной блокировкой.
+     */
+    private ImportResponseDTO importFromFileInternal(String fileContent, String username, String fileName) {
         logger.info("========================================");
         logger.info("=== IMPORT FROM FILE START ===");
         logger.info("Username: {}", username);
@@ -1117,6 +1125,14 @@ public class ImportServiceImpl implements ImportService {
     @Transactional(rollbackFor = Exception.class)
     @Override
     public ImportResponseDTO importCoordinates(ImportCoordinatesRequestDTO request, String username, String fileName) {
+        // Глобальная последовательная обработка импортов
+        return lockManager.executeWithLock("import_global", () -> importCoordinatesInternal(request, username, fileName));
+    }
+    
+    /**
+     * Внутренняя реализация импорта координат. Предполагается, что вызов защищен глобальной блокировкой.
+     */
+    private ImportResponseDTO importCoordinatesInternal(ImportCoordinatesRequestDTO request, String username, String fileName) {
         ImportHistory importHistory = new ImportHistory();
         importHistory.setUsername(username);
         importHistory.setStatus(ImportStatus.PENDING);
@@ -1277,6 +1293,14 @@ public class ImportServiceImpl implements ImportService {
     @Transactional(rollbackFor = Exception.class)
     @Override
     public ImportResponseDTO importChapters(ImportChaptersRequestDTO request, String username, String fileName) {
+        // Глобальная последовательная обработка импортов
+        return lockManager.executeWithLock("import_global", () -> importChaptersInternal(request, username, fileName));
+    }
+    
+    /**
+     * Внутренняя реализация импорта глав. Предполагается, что вызов защищен глобальной блокировкой.
+     */
+    private ImportResponseDTO importChaptersInternal(ImportChaptersRequestDTO request, String username, String fileName) {
         ImportHistory importHistory = new ImportHistory();
         importHistory.setUsername(username);
         importHistory.setStatus(ImportStatus.PENDING);
