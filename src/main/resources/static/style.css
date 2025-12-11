@@ -548,3 +548,51 @@ form input, form select {
 .tab-content.active {
     display: block;
 }
+
+/* Toggle switch для логирования статистики кэша */
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+    font-size: 14px;
+    color: #495057;
+}
+
+.toggle-switch {
+    position: relative;
+    width: 50px;
+    height: 24px;
+    appearance: none;
+    background-color: #ccc;
+    border-radius: 24px;
+    outline: none;
+    transition: background-color 0.3s;
+    cursor: pointer;
+}
+
+.toggle-switch:checked {
+    background-color: #1c4d36;
+}
+
+.toggle-switch::before {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: white;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.3s;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-switch:checked::before {
+    transform: translateX(26px);
+}
+
+.toggle-slider {
+    display: none; /* Используем псевдоэлемент ::before вместо отдельного элемента */
+}

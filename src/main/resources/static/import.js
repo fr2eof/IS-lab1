@@ -143,7 +143,8 @@ function importFile(type) {
 
         // Для spacemarines используем старый метод /file, для остальных - JSON
         if (type === 'spacemarines') {
-            fetch(`${API_IMPORT}${endpoint}?username=${encodeURIComponent(username)}`, {
+            const fileName = file.name || `import_${type}_${Date.now()}.json`;
+            fetch(`${API_IMPORT}${endpoint}?username=${encodeURIComponent(username)}&fileName=${encodeURIComponent(fileName)}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'text/plain'
@@ -193,7 +194,8 @@ function importFile(type) {
             // Для coordinates и chapters парсим JSON и отправляем
             try {
                 const jsonContent = JSON.parse(e.target.result);
-                fetch(`${API_IMPORT}${endpoint}?username=${encodeURIComponent(username)}`, {
+                const fileName = file.name || `import_${type}_${Date.now()}.json`;
+                fetch(`${API_IMPORT}${endpoint}?username=${encodeURIComponent(username)}&fileName=${encodeURIComponent(fileName)}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json'

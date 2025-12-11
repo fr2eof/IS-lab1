@@ -8,6 +8,7 @@ public record ImportHistoryDTO(
         String status,
         Integer createdObjectsCount,
         String errorMessage,
+        String filePath,
         ZonedDateTime createdAt
 ) {
 }

@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -26,9 +27,11 @@ public interface ChapterRepository extends JpaRepository<Chapter, Long> {
     Optional<Chapter> findByName(String name);
     
     // Пагинация
+    @QueryHints(@jakarta.persistence.QueryHint(name = org.hibernate.jpa.HibernateHints.HINT_CACHEABLE, value = "true"))
     Page<Chapter> findAll(Pageable pageable);
     
     // Сортировка и пагинация
+    @QueryHints(@jakarta.persistence.QueryHint(name = org.hibernate.jpa.HibernateHints.HINT_CACHEABLE, value = "true"))
     List<Chapter> findAll(Sort sort);
     
     // Проверка уникальности с блокировкой для предотвращения race conditions

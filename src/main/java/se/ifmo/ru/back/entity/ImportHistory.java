@@ -26,6 +26,9 @@ public class ImportHistory {
     @Column(name = "error_message", columnDefinition = "TEXT")
     private String errorMessage;
 
+    @Column(name = "file_path")
+    private String filePath;
+
     @Column(name = "created_at", nullable = false)
     private ZonedDateTime createdAt;
 
@@ -92,6 +95,14 @@ public class ImportHistory {
 
     public void setCreatedAt(ZonedDateTime createdAt) {
         this.createdAt = createdAt;
+    }
+
+    public String getFilePath() {
+        return filePath;
+    }
+
+    public void setFilePath(String filePath) {
+        this.filePath = filePath;
     }
 }
 

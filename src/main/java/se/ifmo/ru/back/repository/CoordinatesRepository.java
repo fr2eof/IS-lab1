@@ -7,6 +7,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import se.ifmo.ru.back.entity.Coordinates;
@@ -21,9 +22,11 @@ public interface CoordinatesRepository extends JpaRepository<Coordinates, Long> 
     // findById, save, delete, findAll, count - уже есть в JpaRepository
     
     // Пагинация
+    @QueryHints(@jakarta.persistence.QueryHint(name = org.hibernate.jpa.HibernateHints.HINT_CACHEABLE, value = "true"))
     Page<Coordinates> findAll(Pageable pageable);
     
     // Сортировка и пагинация
+    @QueryHints(@jakarta.persistence.QueryHint(name = org.hibernate.jpa.HibernateHints.HINT_CACHEABLE, value = "true"))
     List<Coordinates> findAll(Sort sort);
     
     // Проверка уникальности с блокировкой для предотвращения race conditions
