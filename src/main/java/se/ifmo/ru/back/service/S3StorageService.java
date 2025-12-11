@@ -64,5 +64,12 @@ public interface S3StorageService {
      * @return URL для скачивания
      */
     String generateDownloadUrl(String filePath, int expirationMinutes) throws Exception;
+    
+    /**
+     * Извлекает оригинальное имя файла из пути, убирая timestamp
+     * @param filePath путь к файлу (ключ объекта)
+     * @return оригинальное имя файла без timestamp
+     */
+    String extractOriginalFileName(String filePath);
 }
 

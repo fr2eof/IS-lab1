@@ -307,5 +307,55 @@ public class S3StorageServiceImpl implements S3StorageService {
         // Структура: imports/YYYY-MM-DD/importType/fileName
         return String.format("imports/%s/%s/%s", datePrefix, normalizedType, sanitizedFileName);
     }
+    
+    @Override
+    public String extractOriginalFileName(String filePath) {
+        if (filePath == null || filePath.trim().isEmpty()) {
+            return "import.json";
+        }
+        
+        // Извлекаем имя файла из пути
+        String fileName = filePath.substring(filePath.lastIndexOf('/') + 1);
+        if (fileName.isEmpty()) {
+            return "import.json";
+        }
+        
+        // Убираем timestamp из имени файла
+        // Формат: nameWithoutExt_timestamp.extension
+        // Нужно вернуть: nameWithoutExt.extension
+        
+        int lastDot = fileName.lastIndexOf('.');
+        if (lastDot <= 0) {
+            // Нет расширения, просто убираем timestamp если есть
+            // Ищем последний _ и проверяем, является ли следующая часть числом (timestamp)
+            int lastUnderscore = fileName.lastIndexOf('_');
+            if (lastUnderscore > 0) {
+                String afterUnderscore = fileName.substring(lastUnderscore + 1);
+                // Проверяем, является ли это числом (timestamp обычно 13 цифр)
+                if (afterUnderscore.matches("^\\d+$") && afterUnderscore.length() >= 10) {
+                    // Это timestamp, убираем его
+                    return fileName.substring(0, lastUnderscore) + ".json";
+                }
+            }
+            return fileName + ".json";
+        }
+        
+        String extension = fileName.substring(lastDot);
+        String nameWithTimestamp = fileName.substring(0, lastDot);
+        
+        // Ищем последний _ перед расширением
+        int lastUnderscore = nameWithTimestamp.lastIndexOf('_');
+        if (lastUnderscore > 0) {
+            String afterUnderscore = nameWithTimestamp.substring(lastUnderscore + 1);
+            // Проверяем, является ли это числом (timestamp обычно 13 цифр)
+            if (afterUnderscore.matches("^\\d+$") && afterUnderscore.length() >= 10) {
+                // Это timestamp, убираем его
+                return nameWithTimestamp.substring(0, lastUnderscore) + extension;
+            }
+        }
+        
+        // Если timestamp не найден, возвращаем как есть
+        return fileName;
+    }
 }
 

@@ -242,9 +242,9 @@ public class ImportController {
             try {
                 java.io.InputStream fileStream = s3StorageService.downloadFileAsStream(history.filePath());
                 
-                // Определяем имя файла из пути
-                String fileName = history.filePath().substring(history.filePath().lastIndexOf('/') + 1);
-                if (fileName.isEmpty()) {
+                // Извлекаем оригинальное имя файла без timestamp
+                String fileName = s3StorageService.extractOriginalFileName(history.filePath());
+                if (fileName == null || fileName.trim().isEmpty()) {
                     fileName = "import_" + id + ".json";
                 }
                 
