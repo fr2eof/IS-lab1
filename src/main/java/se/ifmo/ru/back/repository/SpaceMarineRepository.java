@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +24,7 @@ public interface SpaceMarineRepository extends JpaRepository<SpaceMarine, Intege
     List<SpaceMarine> findAllWithRelations();
     
     @Query("SELECT sm FROM SpaceMarine sm LEFT JOIN FETCH sm.coordinates LEFT JOIN FETCH sm.chapter")
+    @QueryHints(@jakarta.persistence.QueryHint(name = org.hibernate.jpa.HibernateHints.HINT_CACHEABLE, value = "true"))
     Page<SpaceMarine> findAllWithRelations(Pageable pageable);
     
     // Поиск по имени (содержит подстроку)
@@ -73,6 +75,7 @@ public interface SpaceMarineRepository extends JpaRepository<SpaceMarine, Intege
     // Поиск с фильтрами по имени (точное совпадение, case-insensitive)
     @Query("SELECT sm FROM SpaceMarine sm LEFT JOIN FETCH sm.coordinates LEFT JOIN FETCH sm.chapter " +
            "WHERE LOWER(sm.name) = LOWER(:nameFilter)")
+    @QueryHints(@jakarta.persistence.QueryHint(name = org.hibernate.jpa.HibernateHints.HINT_CACHEABLE, value = "true"))
     Page<SpaceMarine> findWithNameFilter(@Param("nameFilter") String nameFilter, Pageable pageable);
     
     // Подсчет с фильтром по имени

@@ -10,10 +10,14 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+import org.hibernate.annotations.Cache;
+import org.hibernate.annotations.CacheConcurrencyStrategy;
 import se.ifmo.ru.back.validation.UniqueFields;
 
 @Entity
 @Table(name = "chapters")
+@Cacheable
+@Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "se.ifmo.ru.back.entity.Chapter")
 @Setter
 @Getter
 @NoArgsConstructor

@@ -6,12 +6,16 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import lombok.ToString;
+import org.hibernate.annotations.Cache;
+import org.hibernate.annotations.CacheConcurrencyStrategy;
 import se.ifmo.ru.back.validation.UniqueSpaceMarineInChapter;
 
 import java.time.ZonedDateTime;
 
 @Entity
 @Table(name = "space_marines")
+@Cacheable
+@Cache(usage = CacheConcurrencyStrategy.READ_WRITE, region = "se.ifmo.ru.back.entity.SpaceMarine")
 @Getter
 @Setter
 @NoArgsConstructor
@@ -31,6 +35,7 @@ public class SpaceMarine {
     @NotNull(message = "Coordinates cannot be null")
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "coordinates_id", nullable = false)
+    @Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
     // NOTE: Multiple SpaceMarines can share the same coordinates according to requirements
     // If constraint violation occurs, unique constraint may need to be removed from DB
     private Coordinates coordinates;
@@ -41,6 +46,7 @@ public class SpaceMarine {
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "chapter_id")
+    @Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
     private Chapter chapter;
 
     @NotNull(message = "Health cannot be null")
