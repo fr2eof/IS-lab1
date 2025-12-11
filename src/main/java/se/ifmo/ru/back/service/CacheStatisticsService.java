@@ -1,11 +1,9 @@
 package se.ifmo.ru.back.service;
 
-import lombok.Getter;
 import org.hibernate.SessionFactory;
 import org.hibernate.stat.Statistics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import jakarta.persistence.EntityManagerFactory;
 
@@ -16,25 +14,20 @@ public class CacheStatisticsService {
     private static final Logger logger = LoggerFactory.getLogger(CacheStatisticsService.class);
 
     private final EntityManagerFactory entityManagerFactory;
-    /**
-     * -- GETTER --
-     *  Проверяет, включено ли логирование статистики
-     */
-    @Getter
-    private final boolean statisticsEnabled;
+    private final CacheStatisticsStateService stateService;
 
     public CacheStatisticsService(
             EntityManagerFactory entityManagerFactory,
-            @Value("${app.cache.stats.enabled:false}") boolean statisticsEnabled) {
+            CacheStatisticsStateService stateService) {
         this.entityManagerFactory = entityManagerFactory;
-        this.statisticsEnabled = statisticsEnabled;
+        this.stateService = stateService;
     }
 
     /**
      * Логирует статистику L2 JPA Cache (cache hits, cache misses)
      */
     public void logCacheStatistics() {
-        if (!statisticsEnabled) {
+        if (!stateService.isStatisticsEnabled()) {
             return;
         }
 

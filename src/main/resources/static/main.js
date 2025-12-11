@@ -1184,3 +1184,61 @@ function showDeleteConfirmationDialog(marineName, relatedData) {
         });
     });
 }
+
+// Функции для работы с тумблером логирования статистики кэша
+async function loadCacheStatsStatus() {
+    try {
+        const response = await fetch('/api/cache-stats/status');
+        if (response.ok) {
+            const data = await response.json();
+            const toggle = document.getElementById('cacheStatsToggle');
+            if (toggle) {
+                toggle.checked = data.enabled;
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка при загрузке состояния логирования кэша:', error);
+    }
+}
+
+async function toggleCacheStats() {
+    const toggle = document.getElementById('cacheStatsToggle');
+    if (!toggle) return;
+    
+    const previousState = toggle.checked;
+    
+    try {
+        const response = await fetch('/api/cache-stats/toggle', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            toggle.checked = data.enabled;
+            console.log('Логирование статистики кэша:', data.enabled ? 'включено' : 'отключено');
+        } else {
+            // В случае ошибки возвращаем тумблер в предыдущее состояние
+            toggle.checked = previousState;
+            console.error('Ошибка при переключении логирования кэша');
+        }
+    } catch (error) {
+        // В случае ошибки возвращаем тумблер в предыдущее состояние
+        toggle.checked = previousState;
+        console.error('Ошибка при переключении логирования кэша:', error);
+    }
+}
+
+// Инициализация тумблера при загрузке страницы
+document.addEventListener('DOMContentLoaded', function() {
+    const toggle = document.getElementById('cacheStatsToggle');
+    if (toggle) {
+        // Загружаем состояние с бэка
+        loadCacheStatsStatus();
+        
+        // Обработчик переключения
+        toggle.addEventListener('change', toggleCacheStats);
+    }
+});
