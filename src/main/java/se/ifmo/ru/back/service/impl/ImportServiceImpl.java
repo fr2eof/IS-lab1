@@ -21,6 +21,7 @@ import se.ifmo.ru.back.repository.CoordinatesRepository;
 import se.ifmo.ru.back.repository.ImportHistoryRepository;
 import se.ifmo.ru.back.repository.SpaceMarineRepository;
 import se.ifmo.ru.back.service.ImportService;
+import se.ifmo.ru.back.service.S3StorageService;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -39,6 +40,8 @@ public class ImportServiceImpl implements ImportService {
     private final ImportHistoryRepository importHistoryRepository;
     private final Validator validator;
     private final LockManager lockManager;
+    private final S3StorageService s3StorageService;
+    private final TwoPhaseCommitManager twoPhaseCommitManager;
 
     public ImportServiceImpl(
             SpaceMarineRepository spaceMarineRepository,
@@ -46,13 +49,17 @@ public class ImportServiceImpl implements ImportService {
             ChapterRepository chapterRepository,
             ImportHistoryRepository importHistoryRepository,
             Validator validator,
-            LockManager lockManager) {
+            LockManager lockManager,
+            S3StorageService s3StorageService,
+            TwoPhaseCommitManager twoPhaseCommitManager) {
         this.spaceMarineRepository = spaceMarineRepository;
         this.coordinatesRepository = coordinatesRepository;
         this.chapterRepository = chapterRepository;
         this.importHistoryRepository = importHistoryRepository;
         this.validator = validator;
         this.lockManager = lockManager;
+        this.s3StorageService = s3StorageService;
+        this.twoPhaseCommitManager = twoPhaseCommitManager;
     }
     
     /**
@@ -633,11 +640,21 @@ public class ImportServiceImpl implements ImportService {
     @Transactional(rollbackFor = Exception.class)
     @Override
     public ImportResponseDTO importFromFile(String fileContent, String username) {
+        logger.info("========================================");
+        logger.info("=== IMPORT FROM FILE START ===");
+        logger.info("Username: {}", username);
+        logger.info("File content length: {} characters", fileContent != null ? fileContent.length() : 0);
+        
         // Создаем запись в истории импорта со статусом PENDING
+        logger.info("Creating ImportHistory record...");
         ImportHistory importHistory = new ImportHistory();
         importHistory.setUsername(username);
         importHistory.setStatus(ImportStatus.PENDING);
         importHistory = importHistoryRepository.save(importHistory);
+        logger.info("ImportHistory created: id={}, status={}", importHistory.getId(), importHistory.getStatus());
+        
+        String fileName = "import_" + importHistory.getId() + "_" + System.currentTimeMillis() + ".json";
+        logger.info("Generated file name: {}", fileName);
         
         try {
             // Парсим JSON
@@ -681,12 +698,156 @@ public class ImportServiceImpl implements ImportService {
             
             // Используем существующую запись для импорта
             Long existingHistoryId = importHistory.getId();
+            logger.info("Using existing ImportHistory ID: {}", existingHistoryId);
             
-            // Импортируем данные, используя существующую запись истории
-            return importSpaceMarines(request, username, existingHistoryId);
+            // Реализуем двухфазный коммит для распределенной транзакции
+            // Фаза 1: Подготовка - загружаем файл в S3
+            // Фаза 2: Коммит - сохраняем данные в БД и обновляем filePath в ImportHistory
+            
+            logger.info("Initializing two-phase commit participants...");
+            String[] filePathHolder = new String[1];
+            logger.info("FilePathHolder initialized: {}", filePathHolder[0]);
+            
+            List<TwoPhaseCommitManager.TransactionParticipant> participants = new ArrayList<>();
+            
+            // Участник 1: S3 хранилище
+            logger.info("Creating S3 participant...");
+            TwoPhaseCommitManager.TransactionParticipant s3Participant = 
+                twoPhaseCommitManager.createS3Participant(s3StorageService, fileContent, fileName, filePathHolder);
+            participants.add(s3Participant);
+            logger.info("S3 participant created and added to participants list");
+            
+            // Участник 2: БД (импорт данных и сохранение filePath)
+            TwoPhaseCommitManager.TransactionParticipant dbParticipant = 
+                twoPhaseCommitManager.createDatabaseParticipant(() -> {
+                    // В рамках коммита выполняем импорт и сохраняем filePath
+                    try {
+                        // Выполняем импорт данных
+                        importSpaceMarinesInternal(request, username, existingHistoryId);
+                        
+                        // Обновляем filePath в ImportHistory после успешного импорта
+                        ImportHistory history = importHistoryRepository.findById(existingHistoryId)
+                            .orElseThrow(() -> new RuntimeException("ImportHistory not found"));
+                        history.setFilePath(filePathHolder[0]);
+                        importHistoryRepository.save(history);
+                        
+                        logger.info("Database transaction committed: filePath={}, importId={}", 
+                            filePathHolder[0], existingHistoryId);
+                    } catch (Exception e) {
+                        logger.error("Error in database commit phase", e);
+                        throw new RuntimeException("Failed to commit database transaction: " + e.getMessage(), e);
+                    }
+                });
+            participants.add(dbParticipant);
+            
+            // Выполняем двухфазный коммит
+            logger.info("=== TWO-PHASE COMMIT START ===");
+            logger.info("Import history ID: {}", existingHistoryId);
+            logger.info("File name: {}", fileName);
+            logger.info("FilePathHolder before prepare: {}", filePathHolder[0]);
+            
+            try {
+                // ФАЗА 1: ПОДГОТОВКА - загружаем файл в S3
+                logger.info("=== PHASE 1: PREPARE ===");
+                logger.info("Calling s3Participant.prepare()...");
+                s3Participant.prepare();
+                logger.info("S3 participant prepared successfully");
+                logger.info("FilePathHolder after prepare: {}", filePathHolder[0]);
+                
+                if (filePathHolder[0] == null || filePathHolder[0].isEmpty()) {
+                    logger.error("CRITICAL: filePathHolder[0] is null or empty after prepare!");
+                    throw new RuntimeException("File path was not set after S3 prepare phase");
+                }
+                
+                // Проверяем, что файл действительно существует в S3
+                logger.info("Verifying file existence in S3: {}", filePathHolder[0]);
+                boolean fileExists = s3StorageService.fileExists(filePathHolder[0]);
+                logger.info("File exists check result: {}", fileExists);
+                if (!fileExists) {
+                    logger.error("CRITICAL: File does not exist in S3 after prepare phase!");
+                    throw new RuntimeException("File was not found in S3 after upload");
+                }
+                
+                // ФАЗА 2: КОММИТ - импортируем данные в БД и сохраняем filePath
+                logger.info("=== PHASE 2: COMMIT ===");
+                logger.info("FilePathHolder before commit: {}", filePathHolder[0]);
+                
+                try {
+                    // Выполняем импорт данных
+                    logger.info("Calling importSpaceMarinesInternal()...");
+                    ImportResponseDTO importResult = importSpaceMarinesInternal(request, username, existingHistoryId);
+                    logger.info("Import completed successfully. Created objects: {}", importResult.createdObjectsCount());
+                    
+                    // Обновляем filePath в ImportHistory после успешного импорта
+                    logger.info("Updating ImportHistory with filePath...");
+                    logger.info("Looking for ImportHistory with ID: {}", existingHistoryId);
+                    ImportHistory history = importHistoryRepository.findById(existingHistoryId)
+                        .orElseThrow(() -> new RuntimeException("ImportHistory not found"));
+                    logger.info("ImportHistory found: id={}, status={}", history.getId(), history.getStatus());
+                    logger.info("Setting filePath to: {}", filePathHolder[0]);
+                    history.setFilePath(filePathHolder[0]);
+                    history = importHistoryRepository.save(history);
+                    logger.info("ImportHistory saved with filePath: {}", history.getFilePath());
+                    
+                    // Проверяем, что filePath действительно сохранен
+                    ImportHistory verifyHistory = importHistoryRepository.findById(existingHistoryId)
+                        .orElseThrow(() -> new RuntimeException("ImportHistory not found after save"));
+                    logger.info("Verification: ImportHistory filePath = {}", verifyHistory.getFilePath());
+                    
+                    logger.info("=== TWO-PHASE COMMIT SUCCESS ===");
+                    logger.info("Database transaction committed: filePath={}, importId={}", 
+                        filePathHolder[0], existingHistoryId);
+                    
+                    return importResult;
+                    
+                } catch (Exception e) {
+                    // Откатываем файл из S3 при ошибке в БД
+                    logger.error("Error in database commit phase, rolling back S3 file", e);
+                    s3Participant.rollback();
+                    
+                    // Обновляем статус на FAILED
+                    importHistory.setStatus(ImportStatus.FAILED);
+                    String errorMessage = e.getMessage();
+                    if (errorMessage == null || errorMessage.trim().isEmpty()) {
+                        errorMessage = "Неизвестная ошибка при импорте";
+                    }
+                    importHistory.setErrorMessage(errorMessage);
+                    importHistory = importHistoryRepository.save(importHistory);
+                    
+                    return new ImportResponseDTO(
+                            importHistory.getId(), 
+                            "FAILED", 
+                            0, 
+                            "Ошибка импорта",
+                            errorMessage
+                    );
+                }
+                
+            } catch (Exception e) {
+                // Ошибка в фазе подготовки S3
+                logger.error("Error in S3 prepare phase", e);
+                
+                // Обновляем статус на FAILED
+                importHistory.setStatus(ImportStatus.FAILED);
+                String errorMessage = e.getMessage();
+                if (errorMessage == null || errorMessage.trim().isEmpty()) {
+                    errorMessage = "Неизвестная ошибка при импорте";
+                }
+                importHistory.setErrorMessage(errorMessage);
+                importHistory = importHistoryRepository.save(importHistory);
+                
+                return new ImportResponseDTO(
+                        importHistory.getId(), 
+                        "FAILED", 
+                        0, 
+                        "Ошибка импорта",
+                        errorMessage
+                );
+            }
             
         } catch (Exception e) {
-            // Обновляем статус на FAILED при любой ошибке
+            // Обработка ошибок парсинга и валидации (уже обработаны выше, но на всякий случай)
+            logger.error("Unexpected error in importFromFile", e);
             importHistory.setStatus(ImportStatus.FAILED);
             String errorMessage = e.getMessage();
             if (errorMessage == null || errorMessage.trim().isEmpty()) {
@@ -1162,6 +1323,7 @@ public class ImportServiceImpl implements ImportService {
                 entity.getStatus().name(),
                 entity.getCreatedObjectsCount(),
                 entity.getErrorMessage(),
+                entity.getFilePath(),
                 entity.getCreatedAt()
         );
     }

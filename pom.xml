@@ -89,6 +89,13 @@
             <artifactId>spring-boot-starter-aop</artifactId>
             <version>4.0.0-M2</version>
         </dependency>
+        
+        <!-- AWS S3 SDK for Yandex Object Storage -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <version>2.20.0</version>
+        </dependency>
     </dependencies>
 
     <build>

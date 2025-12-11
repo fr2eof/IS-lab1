@@ -13,7 +13,12 @@ import se.ifmo.ru.back.dto.ImportResponseDTO;
 import se.ifmo.ru.back.exception.AccessDeniedException;
 import se.ifmo.ru.back.exception.EntityNotFoundException;
 import se.ifmo.ru.back.service.ImportService;
+import se.ifmo.ru.back.service.S3StorageService;
 import se.ifmo.ru.back.ws.SpaceMarineWebSocket;
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 
 import java.util.List;
 
@@ -22,12 +27,14 @@ import java.util.List;
 public class ImportController {
 
     private final ImportService importService;
+    private final S3StorageService s3StorageService;
 
     // Список администраторов (можно вынести в конфигурацию)
     private static final java.util.Set<String> ADMIN_USERS = java.util.Set.of("admin", "administrator");
 
-    public ImportController(ImportService importService) {
+    public ImportController(ImportService importService, S3StorageService s3StorageService) {
         this.importService = importService;
+        this.s3StorageService = s3StorageService;
     }
 
     @PostMapping(value = "/file", consumes = "text/plain")
@@ -199,6 +206,61 @@ public class ImportController {
                 }
             }
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
+    @GetMapping("/history/{id}/download")
+    public ResponseEntity<?> downloadImportFile(
+            @PathVariable Long id,
+            @RequestParam(defaultValue = "user") String username,
+            @RequestParam(defaultValue = "false") boolean isAdmin) {
+        
+        // Проверяем, является ли пользователь администратором
+        boolean actualIsAdmin = isAdmin || ADMIN_USERS.contains(username.toLowerCase());
+        
+        try {
+            ImportHistoryDTO history = importService.getImportHistoryById(id, username, actualIsAdmin);
+            
+            if (history.filePath() == null || history.filePath().trim().isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("Файл для данного импорта не найден");
+            }
+            
+            // Проверяем существование файла в S3
+            if (!s3StorageService.fileExists(history.filePath())) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body("Файл не найден в хранилище");
+            }
+            
+            // Получаем файл из S3
+            try {
+                java.io.InputStream fileStream = s3StorageService.downloadFileAsStream(history.filePath());
+                
+                // Определяем имя файла из пути
+                String fileName = history.filePath().substring(history.filePath().lastIndexOf('/') + 1);
+                if (fileName.isEmpty()) {
+                    fileName = "import_" + id + ".json";
+                }
+                
+                InputStreamResource resource = new InputStreamResource(fileStream);
+                
+                return ResponseEntity.ok()
+                        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + fileName + "\"")
+                        .contentType(MediaType.APPLICATION_OCTET_STREAM)
+                        .body(resource);
+                        
+            } catch (Exception e) {
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body("Ошибка при загрузке файла: " + e.getMessage());
+            }
+            
+        } catch (EntityNotFoundException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
+        } catch (AccessDeniedException e) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Ошибка при получении файла: " + e.getMessage());
         }
     }
 }

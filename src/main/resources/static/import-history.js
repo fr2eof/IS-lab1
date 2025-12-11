@@ -77,7 +77,7 @@ function displayHistory(history) {
     if (history.length === 0) {
         const row = tbody.insertRow();
         const cell = row.insertCell();
-        cell.colSpan = 6;
+        cell.colSpan = 7;
         cell.textContent = 'История импорта пуста';
         cell.style.textAlign = 'center';
         return;
@@ -130,6 +130,19 @@ function displayHistory(history) {
             errorCell.title = item.errorMessage;
         } else {
             errorCell.textContent = '-';
+        }
+        
+        const fileCell = row.insertCell();
+        if (item.filePath) {
+            const downloadLink = document.createElement('a');
+            downloadLink.href = `/api/import/history/${item.id}/download?username=${encodeURIComponent(document.getElementById('usernameFilter').value || 'user')}&isAdmin=${document.getElementById('isAdminCheck').checked}`;
+            downloadLink.textContent = 'Скачать';
+            downloadLink.style.color = 'blue';
+            downloadLink.style.textDecoration = 'underline';
+            downloadLink.style.cursor = 'pointer';
+            fileCell.appendChild(downloadLink);
+        } else {
+            fileCell.textContent = '-';
         }
     });
 }
