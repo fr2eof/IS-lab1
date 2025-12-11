@@ -187,12 +187,14 @@ public class TwoPhaseCommitManager {
             S3StorageService s3StorageService,
             String fileContent,
             String fileName,
+            String importType,
             String[] filePathHolder) {
         
         logger.info("=== CREATING S3 PARTICIPANT ===");
         logger.info("File name: {}", fileName);
+        logger.info("Import type: {}", importType);
         logger.info("File content length: {}", fileContent != null ? fileContent.length() : 0);
-        logger.info("FilePathHolder array: {}", filePathHolder);
+        logger.info("FilePathHolder array: {}", (Object) filePathHolder);
         
         return new TransactionParticipant(
                 "S3 Storage",
@@ -200,11 +202,11 @@ public class TwoPhaseCommitManager {
                     // Подготовка: загружаем файл в S3
                     logger.info("=== S3 PARTICIPANT PREPARE ACTION START ===");
                     try {
-                        logger.info("Calling s3StorageService.uploadFile()...");
-                        filePathHolder[0] = s3StorageService.uploadFile(fileContent, fileName);
+                        logger.info("Calling s3StorageService.uploadFile() with importType={}...", importType);
+                        filePathHolder[0] = s3StorageService.uploadFile(fileContent, fileName, importType);
                         logger.info("=== S3 PARTICIPANT PREPARE ACTION SUCCESS ===");
                         logger.info("File prepared in S3. File path holder[0] = {}", filePathHolder[0]);
-                        logger.info("FilePathHolder array after upload: {}", filePathHolder);
+                        logger.info("FilePathHolder array after upload: {}", (Object) filePathHolder);
                     } catch (Exception e) {
                         logger.error("=== S3 PARTICIPANT PREPARE ACTION FAILED ===");
                         logger.error("Error preparing file in S3: {}", e.getMessage(), e);
@@ -215,13 +217,13 @@ public class TwoPhaseCommitManager {
                     // Коммит: файл уже загружен, ничего не делаем
                     logger.info("=== S3 PARTICIPANT COMMIT ACTION START ===");
                     logger.info("S3 file committed. File path: {}", filePathHolder[0]);
-                    logger.info("FilePathHolder array in commit: {}", filePathHolder);
+                    logger.info("FilePathHolder array in commit: {}", (Object) filePathHolder);
                     logger.info("=== S3 PARTICIPANT COMMIT ACTION SUCCESS ===");
                 },
                 () -> {
                     // Откат: удаляем файл из S3
                     logger.info("=== S3 PARTICIPANT ROLLBACK ACTION START ===");
-                    logger.info("FilePathHolder array in rollback: {}", filePathHolder);
+                    logger.info("FilePathHolder array in rollback: {}", (Object) filePathHolder);
                     if (filePathHolder[0] != null && !filePathHolder[0].isEmpty()) {
                         logger.info("Rolling back file: {}", filePathHolder[0]);
                         try {
@@ -267,3 +269,4 @@ public class TwoPhaseCommitManager {
         );
     }
 }
+

@@ -76,9 +76,10 @@ public class S3StorageServiceImpl implements S3StorageService {
     }
 
     @Override
-    public String uploadFile(String fileContent, String fileName) throws Exception {
+    public String uploadFile(String fileContent, String fileName, String importType) throws Exception {
         logger.info("=== S3 UPLOAD START ===");
         logger.info("File name: {}", fileName);
+        logger.info("Import type: {}", importType);
         logger.info("File content length: {} characters", fileContent != null ? fileContent.length() : 0);
         logger.info("Bucket name: {}", bucketName);
         logger.info("Endpoint: {}", endpoint);
@@ -88,7 +89,7 @@ public class S3StorageServiceImpl implements S3StorageService {
             logger.info("Converting file content to bytes...");
             byte[] content = fileContent.getBytes("UTF-8");
             logger.info("File content converted to {} bytes", content.length);
-            String result = uploadFile(new ByteArrayInputStream(content), fileName, content.length);
+            String result = uploadFile(new ByteArrayInputStream(content), fileName, content.length, importType);
             logger.info("=== S3 UPLOAD SUCCESS === File key: {}", result);
             return result;
         } catch (Exception e) {
@@ -103,13 +104,18 @@ public class S3StorageServiceImpl implements S3StorageService {
 
     @Override
     public String uploadFile(InputStream inputStream, String fileName, long contentLength) throws Exception {
+        // Для обратной совместимости используем "spacemarines" как тип по умолчанию
+        return uploadFile(inputStream, fileName, contentLength, "spacemarines");
+    }
+    
+    public String uploadFile(InputStream inputStream, String fileName, long contentLength, String importType) throws Exception {
         logger.info("=== S3 UPLOAD FILE (InputStream) START ===");
-        logger.info("File name: {}, Content length: {} bytes", fileName, contentLength);
+        logger.info("File name: {}, Content length: {} bytes, Import type: {}", fileName, contentLength, importType);
         
         try {
             // Генерируем уникальный ключ для файла
             logger.info("Generating file key...");
-            String fileKey = generateFileKey(fileName);
+            String fileKey = generateFileKey(fileName, importType);
             logger.info("Generated file key: {}", fileKey);
             
             logger.info("Building PutObjectRequest...");
@@ -268,11 +274,38 @@ public class S3StorageServiceImpl implements S3StorageService {
         }
     }
 
-    private String generateFileKey(String fileName) {
-        // Генерируем уникальный ключ: imports/YYYY-MM-DD/UUID-originalFileName
+    private String generateFileKey(String fileName, String importType) {
+        // Генерируем уникальный ключ: imports/YYYY-MM-DD/importType/originalFileName
+        // Структура: сначала дата, потом тип сущности
         String datePrefix = java.time.LocalDate.now().toString();
-        String uuid = UUID.randomUUID().toString();
-        String sanitizedFileName = fileName.replaceAll("[^a-zA-Z0-9._-]", "_");
-        return String.format("imports/%s/%s-%s", datePrefix, uuid, sanitizedFileName);
+        String sanitizedFileName;
+        
+        if (fileName != null && !fileName.trim().isEmpty()) {
+            // Используем оригинальное имя файла, очищенное от недопустимых символов
+            sanitizedFileName = fileName.replaceAll("[^a-zA-Z0-9._-]", "_");
+            // Убираем расширение если есть, чтобы добавить его в конце
+            String nameWithoutExt = sanitizedFileName;
+            String extension = "";
+            int lastDot = sanitizedFileName.lastIndexOf('.');
+            if (lastDot > 0) {
+                nameWithoutExt = sanitizedFileName.substring(0, lastDot);
+                extension = sanitizedFileName.substring(lastDot);
+            }
+            // Добавляем timestamp для уникальности
+            sanitizedFileName = nameWithoutExt + "_" + System.currentTimeMillis() + extension;
+        } else {
+            // Если имя не указано, генерируем UUID
+            sanitizedFileName = UUID.randomUUID().toString() + ".json";
+        }
+        
+        // Нормализуем тип импорта
+        String normalizedType = importType != null ? importType.toLowerCase() : "spacemarines";
+        if (!normalizedType.matches("^(spacemarines|coordinates|chapters)$")) {
+            normalizedType = "spacemarines";
+        }
+        
+        // Структура: imports/YYYY-MM-DD/importType/fileName
+        return String.format("imports/%s/%s/%s", datePrefix, normalizedType, sanitizedFileName);
     }
 }
+

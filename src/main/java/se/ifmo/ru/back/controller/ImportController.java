@@ -41,9 +41,10 @@ public class ImportController {
     @ResponseStatus(HttpStatus.CREATED)
     public ResponseEntity<ImportResponseDTO> importFromFile(
             @RequestBody String fileContent,
-            @RequestParam(defaultValue = "user") String username) {
+            @RequestParam(defaultValue = "user") String username,
+            @RequestParam(required = false) String fileName) {
         try {
-            ImportResponseDTO response = importService.importFromFile(fileContent, username);
+            ImportResponseDTO response = importService.importFromFile(fileContent, username, fileName);
 
             if ("SUCCESS".equals(response.status())) {
                 // Уведомляем всех клиентов об импорте (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
@@ -77,9 +78,12 @@ public class ImportController {
     @ResponseStatus(HttpStatus.CREATED)
     public ResponseEntity<ImportResponseDTO> importSpaceMarines(
             @Valid @RequestBody ImportRequestDTO request,
-            @RequestParam(defaultValue = "user") String username) {
+            @RequestParam(defaultValue = "user") String username,
+            @RequestParam(required = false) String fileName) {
         try {
-            ImportResponseDTO response = importService.importSpaceMarines(request, username);
+            ImportResponseDTO response = fileName != null && !fileName.trim().isEmpty()
+                    ? importService.importSpaceMarines(request, username, fileName)
+                    : importService.importSpaceMarines(request, username);
             
             if ("SUCCESS".equals(response.status())) {
                 // Уведомляем всех клиентов об импорте (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
@@ -113,9 +117,10 @@ public class ImportController {
     @ResponseStatus(HttpStatus.CREATED)
     public ResponseEntity<ImportResponseDTO> importCoordinates(
             @Valid @RequestBody se.ifmo.ru.back.dto.ImportCoordinatesRequestDTO request,
-            @RequestParam(defaultValue = "user") String username) {
+            @RequestParam(defaultValue = "user") String username,
+            @RequestParam(required = false) String fileName) {
         try {
-            ImportResponseDTO response = importService.importCoordinates(request, username);
+            ImportResponseDTO response = importService.importCoordinates(request, username, fileName);
             
             if ("SUCCESS".equals(response.status())) {
                 // Уведомляем всех клиентов об импорте (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)
@@ -141,9 +146,10 @@ public class ImportController {
     @ResponseStatus(HttpStatus.CREATED)
     public ResponseEntity<ImportResponseDTO> importChapters(
             @Valid @RequestBody se.ifmo.ru.back.dto.ImportChaptersRequestDTO request,
-            @RequestParam(defaultValue = "user") String username) {
+            @RequestParam(defaultValue = "user") String username,
+            @RequestParam(required = false) String fileName) {
         try {
-            ImportResponseDTO response = importService.importChapters(request, username);
+            ImportResponseDTO response = importService.importChapters(request, username, fileName);
             
             if ("SUCCESS".equals(response.status())) {
                 // Уведомляем всех клиентов об импорте (в try-catch, чтобы ошибки WebSocket не влияли на HTTP ответ)

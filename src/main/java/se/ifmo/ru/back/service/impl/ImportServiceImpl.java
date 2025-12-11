@@ -120,6 +120,13 @@ public class ImportServiceImpl implements ImportService {
         return lockManager.executeWithLock("import_global", () -> importSpaceMarinesInternal(request, username, existingHistoryId));
     }
     
+    @Transactional(rollbackFor = Exception.class)
+    @Override
+    public ImportResponseDTO importSpaceMarines(ImportRequestDTO request, String username, String fileName) {
+        // Глобальная последовательная обработка импортов с сохранением файла
+        return lockManager.executeWithLock("import_global", () -> importSpaceMarinesWithFile(request, username, fileName));
+    }
+    
     /**
      * Внутренняя реализация импорта. Предполагается, что вызов защищен глобальной блокировкой.
      */
@@ -640,6 +647,14 @@ public class ImportServiceImpl implements ImportService {
     @Transactional(rollbackFor = Exception.class)
     @Override
     public ImportResponseDTO importFromFile(String fileContent, String username) {
+        // Для обратной совместимости генерируем имя файла
+        String fileName = "import_" + System.currentTimeMillis() + ".json";
+        return importFromFile(fileContent, username, fileName);
+    }
+    
+    @Transactional(rollbackFor = Exception.class)
+    @Override
+    public ImportResponseDTO importFromFile(String fileContent, String username, String fileName) {
         logger.info("========================================");
         logger.info("=== IMPORT FROM FILE START ===");
         logger.info("Username: {}", username);
@@ -653,8 +668,11 @@ public class ImportServiceImpl implements ImportService {
         importHistory = importHistoryRepository.save(importHistory);
         logger.info("ImportHistory created: id={}, status={}", importHistory.getId(), importHistory.getStatus());
         
-        String fileName = "import_" + importHistory.getId() + "_" + System.currentTimeMillis() + ".json";
-        logger.info("Generated file name: {}", fileName);
+        // Используем переданное имя файла или генерируем
+        if (fileName == null || fileName.trim().isEmpty()) {
+            fileName = "import_" + importHistory.getId() + "_" + System.currentTimeMillis() + ".json";
+        }
+        logger.info("Using file name: {}", fileName);
         
         try {
             // Парсим JSON
@@ -713,7 +731,7 @@ public class ImportServiceImpl implements ImportService {
             // Участник 1: S3 хранилище
             logger.info("Creating S3 participant...");
             TwoPhaseCommitManager.TransactionParticipant s3Participant = 
-                twoPhaseCommitManager.createS3Participant(s3StorageService, fileContent, fileName, filePathHolder);
+                twoPhaseCommitManager.createS3Participant(s3StorageService, fileContent, fileName, "spacemarines", filePathHolder);
             participants.add(s3Participant);
             logger.info("S3 participant created and added to participants list");
             
@@ -1091,6 +1109,14 @@ public class ImportServiceImpl implements ImportService {
     @Transactional(rollbackFor = Exception.class)
     @Override
     public ImportResponseDTO importCoordinates(ImportCoordinatesRequestDTO request, String username) {
+        // Для обратной совместимости
+        String fileName = "import_coordinates_" + System.currentTimeMillis() + ".json";
+        return importCoordinates(request, username, fileName);
+    }
+    
+    @Transactional(rollbackFor = Exception.class)
+    @Override
+    public ImportResponseDTO importCoordinates(ImportCoordinatesRequestDTO request, String username, String fileName) {
         ImportHistory importHistory = new ImportHistory();
         importHistory.setUsername(username);
         importHistory.setStatus(ImportStatus.PENDING);
@@ -1180,17 +1206,55 @@ public class ImportServiceImpl implements ImportService {
                 );
             }
 
-            importHistory.setStatus(ImportStatus.SUCCESS);
-            importHistory.setCreatedObjectsCount(createdCoordinates.size());
-            importHistory.setErrorMessage(null);
-            importHistory = importHistoryRepository.save(importHistory);
+            // Сохраняем файл в S3 с двухфазным коммитом
+            String fileContent = jakarta.json.Json.createObjectBuilder()
+                    .add("coordinates", jakarta.json.Json.createArrayBuilder(
+                            request.coordinates().stream()
+                                    .map(c -> jakarta.json.Json.createObjectBuilder()
+                                            .add("x", c.x())
+                                            .add("y", c.y() != null ? jakarta.json.Json.createValue(c.y()) : jakarta.json.JsonValue.NULL)
+                                            .build())
+                                    .collect(java.util.stream.Collectors.toList())))
+                    .build()
+                    .toString();
+            
+            String[] filePathHolder = new String[1];
+            try {
+                // ФАЗА 1: ПОДГОТОВКА - загружаем файл в S3
+                logger.info("=== PHASE 1: PREPARE (Coordinates) ===");
+                TwoPhaseCommitManager.TransactionParticipant s3Participant = 
+                    twoPhaseCommitManager.createS3Participant(s3StorageService, fileContent, fileName, "coordinates", filePathHolder);
+                s3Participant.prepare();
+                logger.info("S3 file prepared: {}", filePathHolder[0]);
+                
+                // ФАЗА 2: КОММИТ - сохраняем данные в БД и обновляем filePath
+                logger.info("=== PHASE 2: COMMIT (Coordinates) ===");
+                importHistory.setStatus(ImportStatus.SUCCESS);
+                importHistory.setCreatedObjectsCount(createdCoordinates.size());
+                importHistory.setErrorMessage(null);
+                importHistory.setFilePath(filePathHolder[0]);
+                importHistory = importHistoryRepository.save(importHistory);
+                logger.info("Database transaction committed: filePath={}, importId={}", 
+                    filePathHolder[0], importHistory.getId());
 
-            return new ImportResponseDTO(
-                    importHistory.getId(),
-                    "SUCCESS",
-                    createdCoordinates.size(),
-                    "Успешно импортировано " + createdCoordinates.size() + " координат"
-            );
+                return new ImportResponseDTO(
+                        importHistory.getId(),
+                        "SUCCESS",
+                        createdCoordinates.size(),
+                        "Успешно импортировано " + createdCoordinates.size() + " координат"
+                );
+            } catch (Exception s3Exception) {
+                // Откатываем файл из S3 при ошибке
+                logger.error("Error in two-phase commit, rolling back S3 file", s3Exception);
+                if (filePathHolder[0] != null) {
+                    try {
+                        s3StorageService.deleteFile(filePathHolder[0]);
+                    } catch (Exception rollbackException) {
+                        logger.error("Error rolling back file from S3", rollbackException);
+                    }
+                }
+                throw s3Exception;
+            }
 
         } catch (Exception e) {
             importHistory.setStatus(ImportStatus.FAILED);
@@ -1205,6 +1269,14 @@ public class ImportServiceImpl implements ImportService {
     @Transactional(rollbackFor = Exception.class)
     @Override
     public ImportResponseDTO importChapters(ImportChaptersRequestDTO request, String username) {
+        // Для обратной совместимости
+        String fileName = "import_chapters_" + System.currentTimeMillis() + ".json";
+        return importChapters(request, username, fileName);
+    }
+    
+    @Transactional(rollbackFor = Exception.class)
+    @Override
+    public ImportResponseDTO importChapters(ImportChaptersRequestDTO request, String username, String fileName) {
         ImportHistory importHistory = new ImportHistory();
         importHistory.setUsername(username);
         importHistory.setStatus(ImportStatus.PENDING);
@@ -1294,17 +1366,55 @@ public class ImportServiceImpl implements ImportService {
                 );
             }
 
-            importHistory.setStatus(ImportStatus.SUCCESS);
-            importHistory.setCreatedObjectsCount(createdChapters.size());
-            importHistory.setErrorMessage(null);
-            importHistory = importHistoryRepository.save(importHistory);
+            // Сохраняем файл в S3 с двухфазным коммитом
+            String fileContent = jakarta.json.Json.createObjectBuilder()
+                    .add("chapters", jakarta.json.Json.createArrayBuilder(
+                            request.chapters().stream()
+                                    .map(c -> jakarta.json.Json.createObjectBuilder()
+                                            .add("name", c.name())
+                                            .add("marinesCount", c.marinesCount())
+                                            .build())
+                                    .collect(java.util.stream.Collectors.toList())))
+                    .build()
+                    .toString();
+            
+            String[] filePathHolder = new String[1];
+            try {
+                // ФАЗА 1: ПОДГОТОВКА - загружаем файл в S3
+                logger.info("=== PHASE 1: PREPARE (Chapters) ===");
+                TwoPhaseCommitManager.TransactionParticipant s3Participant = 
+                    twoPhaseCommitManager.createS3Participant(s3StorageService, fileContent, fileName, "chapters", filePathHolder);
+                s3Participant.prepare();
+                logger.info("S3 file prepared: {}", filePathHolder[0]);
+                
+                // ФАЗА 2: КОММИТ - сохраняем данные в БД и обновляем filePath
+                logger.info("=== PHASE 2: COMMIT (Chapters) ===");
+                importHistory.setStatus(ImportStatus.SUCCESS);
+                importHistory.setCreatedObjectsCount(createdChapters.size());
+                importHistory.setErrorMessage(null);
+                importHistory.setFilePath(filePathHolder[0]);
+                importHistory = importHistoryRepository.save(importHistory);
+                logger.info("Database transaction committed: filePath={}, importId={}", 
+                    filePathHolder[0], importHistory.getId());
 
-            return new ImportResponseDTO(
-                    importHistory.getId(),
-                    "SUCCESS",
-                    createdChapters.size(),
-                    "Успешно импортировано " + createdChapters.size() + " глав"
-            );
+                return new ImportResponseDTO(
+                        importHistory.getId(),
+                        "SUCCESS",
+                        createdChapters.size(),
+                        "Успешно импортировано " + createdChapters.size() + " глав"
+                );
+            } catch (Exception s3Exception) {
+                // Откатываем файл из S3 при ошибке
+                logger.error("Error in two-phase commit, rolling back S3 file", s3Exception);
+                if (filePathHolder[0] != null) {
+                    try {
+                        s3StorageService.deleteFile(filePathHolder[0]);
+                    } catch (Exception rollbackException) {
+                        logger.error("Error rolling back file from S3", rollbackException);
+                    }
+                }
+                throw s3Exception;
+            }
 
         } catch (Exception e) {
             importHistory.setStatus(ImportStatus.FAILED);
@@ -1313,6 +1423,83 @@ public class ImportServiceImpl implements ImportService {
             }
             importHistory = importHistoryRepository.save(importHistory);
             throw e;
+        }
+    }
+    
+    private ImportResponseDTO importSpaceMarinesWithFile(ImportRequestDTO request, String username, String fileName) {
+        logger.info("=== IMPORT SPACE MARINES WITH FILE START ===");
+        logger.info("Username: {}, File name: {}", username, fileName);
+        
+        // Создаем запись в истории импорта
+        ImportHistory importHistory = new ImportHistory();
+        importHistory.setUsername(username);
+        importHistory.setStatus(ImportStatus.PENDING);
+        importHistory = importHistoryRepository.save(importHistory);
+        Long existingHistoryId = importHistory.getId();
+        
+        // Сохраняем файл в S3 с двухфазным коммитом
+        String fileContent = jakarta.json.Json.createObjectBuilder()
+                .add("spaceMarines", jakarta.json.Json.createArrayBuilder(
+                        request.spaceMarines().stream()
+                                .map(m -> {
+                                    jakarta.json.JsonObjectBuilder builder = jakarta.json.Json.createObjectBuilder()
+                                            .add("name", m.name())
+                                            .add("health", m.health())
+                                            .add("heartCount", m.heartCount());
+                                    if (m.category() != null) builder.add("category", m.category());
+                                    if (m.weaponType() != null) builder.add("weaponType", m.weaponType());
+                                    if (m.coordinatesId() != null) builder.add("coordinatesId", m.coordinatesId());
+                                    if (m.coordinates() != null) {
+                                        jakarta.json.JsonObjectBuilder coordsBuilder = jakarta.json.Json.createObjectBuilder()
+                                                .add("x", m.coordinates().x());
+                                        if (m.coordinates().y() != null) coordsBuilder.add("y", m.coordinates().y());
+                                        builder.add("coordinates", coordsBuilder);
+                                    }
+                                    if (m.chapterId() != null) builder.add("chapterId", m.chapterId());
+                                    if (m.chapter() != null) {
+                                        builder.add("chapter", jakarta.json.Json.createObjectBuilder()
+                                                .add("name", m.chapter().name())
+                                                .add("marinesCount", m.chapter().marinesCount()));
+                                    }
+                                    return builder.build();
+                                })
+                                .collect(java.util.stream.Collectors.toList())))
+                .build()
+                .toString();
+        
+        String[] filePathHolder = new String[1];
+        try {
+            // ФАЗА 1: ПОДГОТОВКА - загружаем файл в S3
+            logger.info("=== PHASE 1: PREPARE (SpaceMarines) ===");
+            TwoPhaseCommitManager.TransactionParticipant s3Participant = 
+                twoPhaseCommitManager.createS3Participant(s3StorageService, fileContent, fileName, "spacemarines", filePathHolder);
+            s3Participant.prepare();
+            logger.info("S3 file prepared: {}", filePathHolder[0]);
+            
+            // ФАЗА 2: КОММИТ - импортируем данные в БД и обновляем filePath
+            logger.info("=== PHASE 2: COMMIT (SpaceMarines) ===");
+            ImportResponseDTO importResult = importSpaceMarinesInternal(request, username, existingHistoryId);
+            
+            // Обновляем filePath в ImportHistory
+            ImportHistory history = importHistoryRepository.findById(existingHistoryId)
+                .orElseThrow(() -> new RuntimeException("ImportHistory not found"));
+            history.setFilePath(filePathHolder[0]);
+            importHistoryRepository.save(history);
+            logger.info("Database transaction committed: filePath={}, importId={}", 
+                filePathHolder[0], existingHistoryId);
+            
+            return importResult;
+        } catch (Exception s3Exception) {
+            // Откатываем файл из S3 при ошибке
+            logger.error("Error in two-phase commit, rolling back S3 file", s3Exception);
+            if (filePathHolder[0] != null) {
+                try {
+                    s3StorageService.deleteFile(filePathHolder[0]);
+                } catch (Exception rollbackException) {
+                    logger.error("Error rolling back file from S3", rollbackException);
+                }
+            }
+            throw s3Exception;
         }
     }
 

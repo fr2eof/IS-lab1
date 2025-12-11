@@ -11,10 +11,11 @@ public interface S3StorageService {
      * Сохраняет файл в S3 хранилище
      * @param fileContent содержимое файла
      * @param fileName имя файла
+     * @param importType тип импорта (spacemarines, coordinates, chapters)
      * @return путь к файлу в хранилище (ключ объекта)
      * @throws Exception если произошла ошибка при сохранении
      */
-    String uploadFile(String fileContent, String fileName) throws Exception;
+    String uploadFile(String fileContent, String fileName, String importType) throws Exception;
     
     /**
      * Сохраняет файл в S3 хранилище (из InputStream)
@@ -64,3 +65,4 @@ public interface S3StorageService {
      */
     String generateDownloadUrl(String filePath, int expirationMinutes) throws Exception;
 }
+
